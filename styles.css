@@ -1,0 +1,896 @@
+/* Spotlight — styles.css
+ *
+ * Styling for the shelf (the starred-items list drawn at the top of a
+ * root's own branch) and the settings tab. Every color, size, and
+ * spacing value is a `--spotlight-*` custom property, so a theme or a
+ * CSS snippet can restyle any of it without editing this file — see
+ * §7.2 for the token layer.
+ *
+ * The shelf's own accent color follows the active theme's own accent
+ * (Obsidian's `--color-accent`), not a fixed color of its own — under
+ * a theme with a purple accent the star and shelf border render purple,
+ * by design, so it looks native to whatever theme is installed rather
+ * than standing out as an unrelated color. A byte-identical fallback
+ * color is kept for the rare case `--color-accent` is unset, though
+ * Obsidian sets it by default.
+ *
+ * `.spotlight-settings-error` (the settings tab's own refusal/warning
+ * text — a refused "Add another root", a refused root-path edit, the
+ * "doesn't exist in this vault yet" warning) reads the same accent
+ * token too; the settings tab's plain counts line keeps the theme's
+ * muted text color instead and is unaffected by this rule.
+ */
+
+/* ---------------------------------------------------------- §7.2 tokens */
+
+/* BASE, declared unconditionally: keeps the marker family defined even if
+   theme-dark/theme-light land on <html> instead of <body> — an
+   unconfirmed case. Worst case with this base in place is the wrong room's
+   orange (a contrast regression); worst case without it is no color at
+   all. */
+/* --spotlight-header-text: the
+   header LABEL's own text token, distinct from --spotlight-marker.
+   Sampled the shipped render directly: ink exactly #d43f16, ground
+   exactly #f1ede2, 3.97:1 live-confirmed. At the header's actual cap
+   height (12.0 CSS px) and weight 600, it clears neither leg of WCAG's
+   large-text exemption, so the 4.5:1 text floor governs, and 3.97:1
+   fails it. Some themes carry their own dedicated token for exactly this
+   case — same hue/saturation as their main marker color, one
+   lightness step down — not a new color entering this file's palette.
+   The star keeps --spotlight-marker unchanged: it's a non-text mark and
+   already clears the 3:1 non-text floor as-is (§7.6's own measured
+   5.75:1/6.17:1).
+
+   v0.4.2 (the design spec, §2.3): the shelf's own "SPOTLIGHT (n)" header
+   now reads THIS token directly (`.spotlight-shelf-header`, below) —
+   the orphaned `--spotlight-shelf-label` chain from 0.4.0/0.4.1 is
+   deleted outright, not just stopped-using. Worst case across all four
+   measured grounds (stock dark/light, a themed dark/light pair): 4.74:1 —
+   clears 4.5:1 everywhere. */
+/* --spotlight-pill-tint: same
+   `hsla(--accent-h, --accent-s, --accent-l, alpha)` chain as
+   --spotlight-marker-soft (never a hard-coded colour), but its OWN alpha
+   step, and read only by the directory pill (§7.9, below) -- deliberately
+   NOT a change to --spotlight-marker-soft itself, which the starred
+   star's own `.is-on:hover` background also reads (§7.6, above); a
+   shared-token fix would have re-tinted that hover too, never asked for.
+
+   The problem this closes: on a theme with a high-saturation, mid-
+   lightness accent color, the pill text measured 4.39:1 against a 12%
+   accent tint, under the 4.5:1 WCAG AA floor. Computed via the real WCAG
+   relative-luminance formula (a Node script, not a calculator-by-eye
+   estimate), stepping the tint's own alpha down: 13% ->
+   4.32:1, 12% (the old value) -> 4.39:1, 10% ->
+   4.52:1 (clears, but by a margin too thin to trust against
+   rounding/measurement drift), 8% -> 4.66:1, **6% -> 4.80:1 (chosen)**,
+   0% (fully dropped) -> 5.24:1. 6% keeps a real, visible tint (lightening
+   rather than dropping the accent) with a comfortable
+   margin over the floor. Dark mode is genuinely UNCHANGED (still reads
+   --spotlight-marker-soft, still 13%) -- its own accent measures well
+   clear of the floor already.
+
+   Default-theme (stock Obsidian, no theme installed) result, noted for
+   completeness, unaffected by this fix either way: stock's own default
+   accent (`hsl(258,88%,66%)`, rgb(138,92,245)) on a plain white
+   `--background-primary` never clears 4.5:1 regardless of tint --
+   4.26:1 at 0%, worse with any tint added (3.63:1 at 13%, 3.96:1 at 6%,
+   this fix's own new value) -- the SAME pre-existing, separately-named
+   Known Limit this file already carries for stock Obsidian's purple
+   (README), not something this fix touches or claims to close; a purple
+   accent's own text-vs-tint gap is a materially different problem
+   (already failing at 0% tint) from the light-mode-tint-only gap this
+   fix DOES close for a themed accent. */
+:where(body) {
+  --spotlight-marker: var(--color-accent, #ff5a2d);
+  --spotlight-marker-soft: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.13);
+  --spotlight-pill-tint: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.13);
+  --spotlight-header-text: var(--color-accent, #ff5a2d);
+}
+:where(body.theme-dark) {
+  --spotlight-marker: var(--color-accent, #ff5a2d);
+  --spotlight-marker-soft: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.13);
+  --spotlight-pill-tint: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.13);
+  --spotlight-header-text: var(--color-accent, #ff5a2d);
+}
+:where(body.theme-light) {
+  --spotlight-marker: var(--color-accent, #d43f16); /* NOT the dark value — §7.3 */
+  --spotlight-marker-soft: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.12);
+  /* 0.15.2 (k1t): 6%, not 12% -- see this block's own doc comment above
+     for the full contrast account (4.80:1 at this value, computed
+     against the real installed theme file). Only the PILL reads this
+     token; --spotlight-marker-soft (the star hover background) is
+     untouched, still 0.12, on purpose. */
+  --spotlight-pill-tint: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.06);
+  /* #b93613 matches a themed marker-text token, not a
+     new hex — 4.99:1 on the light ground, clears the 4.5:1 text floor. */
+  --spotlight-header-text: var(--color-accent, #b93613);
+}
+:where(body) {
+  --spotlight-star-rest: var(--text-faint);
+  --spotlight-star-hover: var(--text-muted);
+  --spotlight-hover-bg: var(--background-modifier-hover);
+  --spotlight-radius: var(--ink-radius-subtle, 10px); /* NOT --radius-m — some themes remap that to a larger value. The SPOTLIGHT fence's own corner — the only object in this file allowed a card radius. */
+  --spotlight-header-font: var(--ink-font-mono, var(--font-interface));
+  --spotlight-header-size: 10.5px; /* matches the theme's own sidebar-kicker size, not a guess */
+  /* The settings redesign: the directory pill's
+     own three declared values, each named and commented once here, every
+     rule below referring to them by name rather than a literal. */
+  --spotlight-pill-height: 20px; /* SOFT: one line of the small mono label plus 4px air; matches the shelf header's own line */
+  --spotlight-pill-radius: 999px; /* HARD: fully round ends, matching a themed pill shape */
+  --spotlight-kicker-tracking: 0.08em; /* SOFT: the settings-heading kicker's spacing, so the pill reads as the same voice */
+}
+/* A member overrides any of the above from a CSS snippet targeting
+   `body` (never `:root` — an element whose own value is set nearer on
+   `body` never consults a `:root` value). :where() gives every rule above
+   zero specificity so a member's own `body` override always wins
+   regardless of stylesheet load order. */
+
+/* ------------------------------------------------------- §7.6 the star */
+
+.spotlight-star {
+  /* first child of .nav-folder-title / .nav-file-title, not last —
+     placement is §6.1, §17.2 */
+  position: relative;
+  flex: 0 0 auto; /* never the element that shrinks — its horizontal
+                      contribution is cancelled below, out of the title's
+                      flex sizing entirely */
+  margin-left: calc(-1.45em - 20px); /* occupies the row's own reserved
+                                         padding gutter — 20px = the
+                                         chevron's slot, not a guess */
+  margin-right: 20px; /* net displacement of the title: exactly zero */
+  width: 1.45em;
+  height: 1.45em; /* em-relative — survives a theme that changes nav row
+                      font size without changing row height */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: var(--cursor, pointer);
+  color: var(--spotlight-star-rest);
+  transition: color 150ms ease, background-color 150ms ease;
+}
+.spotlight-star svg {
+  /* Lucide `star` */
+  width: 0.95em;
+  height: 0.95em;
+  stroke-width: 1.5; /* resting weight */
+  fill: none;
+}
+.spotlight-star.is-on svg {
+  stroke-width: 1.75; /* ON is always heavier than rest — a relationship,
+                          not two independent numbers */
+  fill: currentColor;
+}
+.spotlight-star::after {
+  /* extends the hit area without affecting layout */
+  content: '';
+  position: absolute;
+  inset: -6px 0 -6px -12px; /* ~32px square; grows left into the measured-
+                                unclaimed band, not right past the chevron */
+}
+.spotlight-star:focus-visible {
+  outline: 2px solid var(--spotlight-marker);
+  outline-offset: 1px;
+}
+.spotlight-star.is-on {
+  color: var(--spotlight-marker);
+}
+
+/* A bare `:hover` is never used anywhere in this file — `@media
+   (hover: hover)` is Obsidian's own deliberate countermeasure for a
+   reproduced iOS bug (a bare `:hover` on touch can fire and stick), not a
+   style preference (PRD §6.1's measured rule, not caution). */
+@media (hover: hover) {
+  .spotlight-star:hover {
+    color: var(--spotlight-star-hover);
+    background: var(--spotlight-hover-bg);
+  }
+  .spotlight-star.is-on:hover {
+    color: var(--spotlight-marker);
+    background: var(--spotlight-marker-soft);
+  }
+}
+
+.spotlight-settings-note {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 11px);
+  margin: 4px 0 12px;
+}
+
+/* §7.8: a refusal or warning
+   in the settings pane (a root-inside-another-root collision, a refused
+   Add, a root path that does not exist in the vault yet) carries this
+   class ALONGSIDE `.spotlight-settings-note` — never in place of it — so
+   it reads the theme's accent instead of the muted text color. Declared
+   AFTER `.spotlight-settings-note` so it wins at equal specificity. The
+   counts line ("N entities found, M starred", `renderCountsFor()`) is
+   never given this second class and stays muted. Reads
+   `--spotlight-accent`, not `--color-accent` directly, so the file's
+   snippet-override contract (`body { --spotlight-marker: ... }`) still
+   recolors this alongside the star and the fence. */
+.spotlight-settings-error {
+  color: var(--spotlight-accent);
+}
+
+.spotlight-settings-note-habits {
+  border-left: 2px solid var(--background-modifier-border);
+  padding-left: 8px;
+}
+
+/* ------------------------------------------- §7.7 degrade, don't break —
+   audited against the actual shipped source (main.js + this file), not
+   asserted from memory. Each row below is a grep, not a claim:
+     grep -n "!important"                    main.js styles.css  -> zero hits
+     grep -n ":nth-child"                    main.js styles.css  -> zero hits
+     grep -n "nav-folder-collapse-indicator" main.js styles.css  -> zero hits
+     grep "className = '\|classList.add("   main.js
+       -> v0.5.0 update: every class Spotlight assigns is `spotlight-star`
+          or one of the `spotlight-shelf*` family (the Overview marks are
+          RETIRED, see the BUILD STATE (v0.5.0) note above) — all on
+          either a REAL row's own title element (the star) or a wholly
+          plugin-created element (the shelf and its rows). None of them is
+          `.nav-folder`/`.nav-file`/`.nav-folder-title`/`.nav-file-title`/
+          `.tree-item*` — the exact classes Obsidian's own drag, rename,
+          selection and native context-menu handlers key off — so none of
+          Spotlight's own markup is reachable by them.
+   PRD §7.7's table, resolved against that audit:
+
+   - Theme sets `display: block` on nav rows -> the star's positioning
+     is plain margin math (.spotlight-star's own rules above), not
+     flex-dependent; `flex: 0 0 auto` simply has nothing to act on. No
+     change EXPECTED — matching the PRD's own hedge exactly, not a
+     stronger claim than source alone can support — because this hasn't
+     been independently measured in block layout; if it drifts, the
+     theme wins, Spotlight loses fidelity, nothing breaks (the standing
+     rule below).
+   - Very small/large interface font -> the star scales (em sizing on
+     .spotlight-star/svg above); the chevron slot doesn't, because its
+     20px offset is pinned in px on purpose (see the comment on
+     .spotlight-star's margin-left above) — the two are deliberately
+     NOT both em, or both px.
+   - Mid-luminance sidebar -> the orange can drop under 3:1 (PRD §7.3's
+     own honest limit); the fill-vs-outline shape distinction (rest vs
+     is-on above) and the `body`-level token override (§7.2 above) are
+     what carry the signal there, not a color fix this file can make
+     unilaterally.
+   - Restyles nav rows positionally (:nth-child) -> could pick up
+     unintended styling; confirmed above that this file and main.js
+     never USE :nth-child themselves, and Spotlight's own elements never
+     carry a `.nav-*`/`.tree-item*` class, so a theme's positional rule
+     has no path onto anything Spotlight created.
+   - No `--font-ui-smaller` (an old Obsidian build) -> irrelevant:
+     `--spotlight-header-size` is a plain 10.5px literal, not chained to
+     that variable at all.
+
+   The standing rule underneath all five: NOTHING in this file uses
+   `!important`, anywhere — confirmed by the same grep. Every one of the
+   above is Spotlight losing fidelity gracefully, never Spotlight
+   fighting the theme for control.
+
+   Also §7.7: anchoring to `.nav-folder-collapse-indicator` stays
+   forbidden (confirmed zero references above) — the star is ordinal
+   (first child of the title, PRD §6.1/§7.6), never positioned relative
+   to the chevron, so a theme that removes or repositions its own
+   chevron simply leaves the star first child of an otherwise-normal
+   row. This is source-verified, not live-verified: the CODE guarantee
+   (no such selector exists) is checked; how it actually LOOKS under a
+   theme that does any of the above still needs a live check once
+   rendered. */
+
+/* ============================================================
+   The reconciled token set.
+   `--spotlight-accent` is no longer a second hue: it is an ALIAS of
+   `--spotlight-marker`, which carries the per-theme values above.
+   `--spotlight-marker` chains through `--color-accent`, a variable
+   Obsidian DOES always set, so the rendered color is always whatever the
+   active theme's accent is — stock Obsidian's purple included. Do not
+   pin this back to a fixed color; following the theme's own accent is
+   the intended behavior. */
+:where(body) {
+  --spotlight-accent: var(--spotlight-marker);
+
+  /* The SPOTLIGHT fence (§2.1) — an ENCLOSURE, never a fill. */
+  --spotlight-fence: var(--spotlight-accent);
+  --spotlight-fence-width: 1px; /* a drawn hairline — never a heavier rule. Clears the 3:1 non-text contrast floor everywhere measured */
+
+  /* The shelf's left edge must be a pure function of root depth, so
+     same-depth shelves always align. An earlier version enforced this by
+     reading `--nav-item-children-margin-start` off `document.body` in
+     JS and writing it back as an inline property on every shelf, on
+     every render.
+
+     The shelf/band's own `margin-inline-start`
+     (below, and the branch-toggle band's own rule further down) now reads
+     `var(--nav-item-children-margin-start, var(--size-4-3, 12px))`
+     DIRECTLY instead. The shelf is a real DOM child of the branch's own row
+     (`item.el`, inside the real Files-panel tree), so the property
+     inherits through the ACTUAL cascade from whichever ancestor a theme
+     or snippet sets it on — the same mechanism Obsidian's own rows
+     already use for their OWN indentation — rather than a value this
+     plugin captured once off `document.body` and then had to
+     re-capture on every reapply to notice a live theme change. The
+     alignment rule holds by construction now, not by
+     re-measurement: every shelf/band in the vault resolves the SAME
+     custom property through the SAME cascade, so two shelves at the
+     same depth (whose `item.el`s already sit at the same absolute
+     position, per Obsidian's own layout) always land on the same
+     margin, and a live theme/snippet change is picked up on the very
+     next paint, with no reapply pass required to notice it. */
+}
+
+/* --------------------------------------------------------- the SPOTLIGHT shelf
+   an ENCLOSURE. Plugin-owned markup
+   throughout — no `.nav-*`/`.tree-item*` class anywhere in this block
+   (see the §7.7 audit note above), so none of Obsidian's own row
+   handlers have any selector that reaches it. */
+
+.spotlight-shelf {
+  /* Fixes an earlier version's bug: the fence
+     sitting flush at the pane edge (x=0). The fence's
+     OUTER LEFT EDGE sits on the branch's own indentation-guide rail —
+     `.tree-item-children`'s own border-inline-start, `--nav-item-
+     children-margin-start` (12px, `--size-4-3`) — not at x=0 and not at
+     the child rows' own +16px border-box. Anchored there, the fence's
+     left border and the guide rail continuing below it read as ONE
+     unbroken vertical line, not two near-parallel rules 4px apart.
+
+     0.13.6 (a platform review, condition C): reads `--nav-item-
+     children-margin-start` DIRECTLY now, never `--spotlight-shelf-indent`
+     (retired — see the `:where(body)` block's own doc comment above for
+     the full account of why a JS-measured, body-level custom property
+     is no longer needed). The shelf is a real DOM child of `item.el`
+     itself, so this inherits through the actual cascade, from whatever
+     ancestor a theme or snippet sets the property on — never from
+     `paddingInlineStart` (that's the CONTAINER's own 4px padding, not
+     its offset — the 0.4.2/0.4.3 bug this addendum originally fixed).
+     The `12px`/`--size-4-3` fallback is unchanged: a shelf rendered
+     before the property resolves at all still lands on the documented
+     default rather than the pane edge. Right edge: 8px (`--size-4-2`)
+     short of the pane's own content edge, the same inset the real rows'
+     own padding-end gives. */
+  margin: 2px var(--size-4-2, 8px) 6px var(--nav-item-children-margin-start, var(--size-4-3, 12px));
+  /* §7.1/§7.4: inline padding 8px (`--size-4-2`) both sides, on the 1px
+     border — lands the title column at +40px (§7.2) and gives the
+     star its own 8px of air off the stroke (§7.3, "the answer to
+     crowding"). Block padding 4px top/bottom (§7.4) — the last row's
+     own 2px margin-bottom lands inside that, an intentional 6px/4px
+     asymmetry that costs no extra number. */
+  padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
+  border: var(--spotlight-fence-width) solid var(--spotlight-fence);
+  border-radius: var(--spotlight-radius); /* 10px — reads as a card; the ONLY object in this file allowed that radius (§2.1, §3.2) */
+  background: none; /* HARD (§2.1): the fence is a line, never a fill — that channel belongs to the Overview row */
+  overflow: hidden; /* the last row's own square hover must not paint past the fence's rounded bottom corners; focus rings use outline-offset: -2px below so nothing clips against this */
+}
+
+/* a platform review, 2026-09-15 (F1): the shelf now lives as a
+   sibling of `childrenEl` inside the row's own `.el` (main.js
+   renderShelfForRoot), not inside `childrenEl` itself — Obsidian's own
+   infinity-scroll layout pass rewrites `childrenEl`'s contents wholesale
+   on every scroll frame, which was silently deleting-and-forcing-a-
+   re-insert of the shelf under the old placement. `.el` is the same
+   element Obsidian's own collapse toggle marks `.is-collapsed` — the
+   shelf needs its own rule to respect that state now that it is no
+   longer a genuine child of `childrenEl` (which already hides itself). */
+.is-collapsed > .spotlight-shelf {
+  display: none;
+}
+
+/* Its margin-bottom goes from 6px to 0
+   when the toggle is present. The toggle band (below) supplies the same
+   6px gap itself, plus the +8px net the design called for -- so the
+   shelf's own trailing margin is zeroed only when a band actually follows
+   it (never on the vault-root root, which renders no band at all). */
+.spotlight-shelf.has-branch-toggle {
+  margin-bottom: 0;
+}
+
+.spotlight-shelf-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* No horizontal padding of its own (a later addendum §7.1/§7.4,
+     2026-09-16) — the fence's own 8px inline padding already supplies
+     it uniformly for the header AND every row; adding more here would
+     break the +40px title-column alignment (§7.2). Vertical rhythm
+     matches the real rows exactly, same rule as `.spotlight-shelf-row`
+     below — see that rule's own comment for the full 27px-pitch math. */
+  padding-block: var(--size-4-1, 4px);
+  line-height: var(--line-height-tight, 1.3);
+  margin-bottom: var(--nav-item-margin-bottom, 2px);
+  cursor: var(--cursor, pointer);
+  color: var(--spotlight-header-text); /* the token actually vetted for header text contrast — not an earlier, orphaned token this used to read */
+  font-family: var(--spotlight-header-font);
+  font-size: var(--spotlight-header-size); /* 10.5px — the theme's own kicker size */
+  font-weight: 500; /* was 600 — the theme's own kicker weight */
+  letter-spacing: 0.16em; /* was 0.04em — the theme's own kicker tracking; this is what makes it read as a kicker, not a small label */
+  text-transform: uppercase;
+  user-select: none;
+}
+.spotlight-shelf-header-label {
+  /* No nowrap rule existed for this label at all
+     before this pass -- FOCUS -> SPOTLIGHT (9 letters vs. 5) doesn't
+     wrap at a narrow-sidebar reference case (single-digit counts measured well
+     inside the fence there), but a flex item's default shrink-to-fit
+     has no floor, so a narrower sidebar or a two-digit count ("(19)")
+     could still wrap the count onto its own line below some width this
+     file does not otherwise guarantee. `.spotlight-shelf`'s own
+     overflow: hidden (above) means the failure mode without this rule
+     is a silent wrap, not a clip -- worse, because it reads as a layout
+     bug rather than an edge truncation. This header is always "WORD (n)"
+     at a fixed 10.5px/0.16em kicker size and never needs to wrap or
+     truncate, so nowrap only, no ellipsis. */
+  white-space: nowrap;
+}
+@media (hover: hover) {
+  .spotlight-shelf-header:hover {
+    background: var(--spotlight-hover-bg);
+  }
+}
+.spotlight-shelf-header:focus-visible {
+  outline: 2px solid var(--spotlight-accent);
+  outline-offset: -2px; /* -2px, not the star's +1px: `.spotlight-shelf`'s own overflow:hidden would clip a positive offset at the fence edge */
+}
+
+.spotlight-shelf-chevron {
+  display: inline-flex;
+  width: 1em;
+  flex: 0 0 auto;
+}
+
+.spotlight-shelf.is-collapsed .spotlight-shelf-rows {
+  display: none;
+}
+
+.spotlight-shelf-row {
+  display: flex;
+  align-items: center;
+  /* +40px title column (a later addendum §7.2, 2026-09-16): rail (12) +
+     border (1) + fence's own inline padding (8) = +21 content start;
+     star box (1em = 13px at the nav's own 13px base) = [+21, +34]; this
+     6px gap = titles land at +40 -- exactly the real child rows' own
+     title column (12 + the container's 4px padding + the row's own
+     24px inline-start = 40). One shared vertical line for the shelf's
+     titles, the SPOTLIGHT label, and every real filename in the branch. */
+  gap: 6px;
+  /* a later addendum §7.4, 2026-09-16 (fixing 0.4.3's own accident: this
+     shorthand used `--nav-item-padding` — a 4-value shorthand, not a
+     length — inside a calc(), which is invalid, so the browser dropped
+     the WHOLE declaration and rows had no padding at all). No
+     horizontal padding of its own any more either: the fence's own 8px
+     inline padding (above) supplies it uniformly. Vertical rhythm now
+     matches the real rows exactly: 13px text * 1.3 line-height = 16.9px
+     + 4px + 4px block padding = ~25px row; +2px margin-bottom = 27px
+     pitch, identical to a real row's own. */
+  padding-block: var(--size-4-1, 4px);
+  line-height: var(--line-height-tight, 1.3);
+  margin-bottom: var(--nav-item-margin-bottom, 2px);
+  cursor: var(--cursor, pointer);
+  border-radius: 0; /* an earlier version used --spotlight-radius (10px) here — a rounded row inside a rounded fence is two lozenges nested */
+  color: var(--text-normal); /* on the plain ground, since the fence interior is never filled — worst case 10.55:1 */
+}
+@media (hover: hover) {
+  .spotlight-shelf-row:hover {
+    background: var(--spotlight-hover-bg); /* square, full fence width — HARD: no row inside the fence is ever tinted (§2.4) */
+  }
+}
+/* role/tabindex/reveal moved off the
+   row itself onto the title -- the row keeps only a plain click listener
+   so the whole line still jumps to/opens the real row, but the focus
+   ring now belongs to whichever control actually receives it. */
+.spotlight-shelf-title:focus-visible {
+  outline: 2px solid var(--spotlight-accent);
+  outline-offset: -2px;
+}
+
+/* Corrects two earlier sizing attempts, both still
+   larger than the real-row star this stands in for. Box 1.0em, glyph
+   0.95em: not a new number, but a relationship — 0.95em is EXACTLY the
+   glyph size `.spotlight-star svg` already uses (§7.6, above). One star
+   glyph size in the whole plugin; the shelf star, a secondary
+   representation, must never out-weigh the real one. Do not reach for
+   `--icon-xs` here again — it isn't tied to the star at all. */
+.spotlight-shelf-star {
+  flex: 0 0 auto;
+  display: inline-flex;
+  width: 1em;
+  height: 1em;
+  color: var(--spotlight-accent);
+  /* The star is its own clickable
+     control (un-spotlights on click, sibling to the title, never
+     nested inside it) -- same affordance family the inline star already
+     uses, no new tokens. The star stays always filled (below).
+     The hover color/background swap
+     that used to live here is REMOVED -- unlike the inline star, which
+     only ever changes background on hover for an already-starred entity
+     (its color stays --spotlight-marker at rest AND on hover, so it
+     never visibly recolors), the shelf star is always in that same
+     "already starred" state by construction, so a color-changing hover
+     read as a broken toggle. The star's color is fixed, never responds
+     to hover; only cursor and the focus-visible outline still do. */
+  cursor: var(--cursor, pointer);
+}
+.spotlight-shelf-star svg {
+  width: 0.95em;
+  height: 0.95em;
+  stroke-width: 1.75;
+  fill: currentColor; /* always filled -- everything on the shelf is, by construction, starred. Non-text, worst case 3.97:1 */
+}
+.spotlight-shelf-star:focus-visible {
+  outline: 2px solid var(--spotlight-accent);
+  outline-offset: -2px; /* the fence's own overflow:hidden convention (see .spotlight-shelf-header above), not the inline star's +1px */
+}
+
+/* The kind icon (folder / file-text) was DROPPED in an earlier version:
+   it consumed the horizontal budget the +40px title
+   column needs, and it was a third object crowding the star.
+   `.spotlight-shelf-icon` and the two inline SVG constants it used are
+   still gone from main.js -- the rule below is a DIFFERENT, narrower one.
+
+   REINTRODUCED for FOLDER rows only: a
+   folder shelf row now carries its own kind icon between the star and
+   the title, drawn through Obsidian's own `setIcon()` (never a
+   hand-rolled SVG). No new gap token:
+   `.spotlight-shelf-row`'s own `gap` (above) already sits between EVERY
+   child, so the icon reuses the identical spacing the star already has
+   to the title on both of its own sides. A note row never gets this
+   icon, so its own title still lands at the ORIGINAL +40px rail (the
+   "geometry arithmetic" test below); a folder row's title sits
+   icon + gap further right than that, deliberately, not by accident --
+   see that test file's sibling geometry test for the exact math. */
+.spotlight-shelf-folder-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  width: 0.95em; /* matches `.spotlight-shelf-star svg`'s own glyph size exactly -- one shared icon scale on the shelf, not two */
+  height: 0.95em;
+  color: currentColor; /* inherits `.spotlight-shelf-row`'s own text colour -- never the accent, which would read as a second star */
+}
+.spotlight-shelf-folder-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* EXTENDED to FILE rows too: a `kind:
+   'file'` shelf row carries the same kind icon, same placement, same
+   mechanism, picked by extension (main.js's own `spotlightFileIconName()`).
+   `.spotlight-shelf-file-icon` is its OWN rule, a byte-for-byte
+   duplicate of `.spotlight-shelf-folder-icon` above rather than a
+   combined selector, so each class keeps its own single-selector `{...}`
+   block -- this file's own CSS-lint tests (test/spotlight-explorer.test.mjs)
+   extract a rule's body by its exact selector text, and two class names
+   sharing one rule would make the folder-only assertions silently stop
+   finding anything to check. */
+.spotlight-shelf-file-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  width: 0.95em;
+  height: 0.95em;
+  color: currentColor;
+}
+.spotlight-shelf-file-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.spotlight-shelf-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------- the BRANCH toggle
+   A small tab
+   hanging off the shelf's own bottom stroke line: click it and everything
+   BELOW the shelf (the real branch) tucks away, leaving only the shelf's
+   starred rows in view; click again and it comes back. Independent of the
+   existing shelf header chevron above (`.spotlight-shelf-header`, which
+   folds the SHELF's own rows) -- this hides the BRANCH instead, main.js's
+   own `spotlight-branch-hidden` class on `item.el`
+   (`.spotlight-branch-hidden > .tree-item-children { display: none }`,
+   below). Plugin-owned markup throughout, same `.spotlight-shelf*`
+   discipline as the rest of this file (§7.7): no `.nav-*`/`.tree-item*`
+   selector here either.
+
+   TWO LAYERS, deliberately: `.spotlight-branch-toggle` is the full-width
+   HIT AREA (the "band"); `.spotlight-branch-toggle-tab` is the small
+   visible drawer-pull (the "tab") centred inside it. The design spec calls
+   the whole strip clickable, not just the tiny tab. */
+.spotlight-branch-toggle {
+  position: relative;
+  display: block;
+  /* Left/right margins match the shelf's own exactly (the design spec:
+     "Width: the full shelf width. Same left margin
+     (`--spotlight-shelf-indent`) and right margin (`--size-4-2`) as the
+     shelf"). Zero top/bottom margin -- the band's own height (below) IS
+     the gap; see `.spotlight-shelf.has-branch-toggle` above for the other
+     half of that accounting.
+
+     0.13.6 (a platform review, condition C): reads `--nav-item-
+     children-margin-start` directly now, the same change and the same
+     reasoning as `.spotlight-shelf`'s own margin, above -- see its doc
+     comment. Still byte-identical to the shelf's own left margin either
+     way, which is the actual requirement the design spec names. */
+  margin: 0 var(--size-4-2, 8px) 0 var(--nav-item-children-margin-start, var(--size-4-3, 12px));
+  /* the design spec: "Height: 14px... Net vertical cost versus today: +8px"
+     -- kept skinny for now, pending a mouse-target usability check. The old shelf-to-branch gap was 6px; 14px here (with
+     the shelf's own margin-bottom now 0) nets exactly +8px. */
+  height: 14px;
+  cursor: var(--cursor, pointer);
+  user-select: none;
+}
+@media (pointer: coarse) {
+  .spotlight-branch-toggle {
+    /* the design spec: "On @media (pointer: coarse) it's 24px" -- a touch
+       target, never shrunk for a mouse. */
+    height: 24px;
+  }
+}
+/* Same rule the shelf itself already has (F1, above): a native collapse on
+   the ROOT hides everything below it, band included -- this is the row's
+   OWN collapse (the arrow next to "Projects"), untouched by this feature,
+   never the branch-hidden state this file adds. */
+.is-collapsed > .spotlight-branch-toggle {
+  display: none;
+}
+
+.spotlight-branch-toggle-tab {
+  position: absolute;
+  /* the design spec: "top flush with the shelf's bottom stroke (overlap 1px
+     so the side strokes join the line)". */
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  /* the design spec: "Size: 28x11px, centred horizontally". */
+  width: 28px;
+  height: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Enclosure rule, no fill at rest (the design spec: "Background: none.") --
+     the SAME fence token/width the shelf itself uses, left/right/bottom
+     only, no top (the shelf's own bottom stroke already draws that edge). */
+  border: var(--spotlight-fence-width) solid var(--spotlight-fence);
+  border-top: none;
+  border-radius: 0 0 5px 5px;
+  /* Showing, at rest: --text-muted (the design spec). */
+  color: var(--text-muted);
+}
+/* Hidden: --spotlight-accent, at rest AND on hover -- a deliberate
+   relationship (the design spec): "accent means 'something is tucked away,'
+   so never flatten both states to one colour." */
+.spotlight-branch-toggle.is-hidden .spotlight-branch-toggle-tab {
+  color: var(--spotlight-accent);
+}
+.spotlight-branch-toggle-tab svg {
+  /* the design spec: "14px box, centred on the tab's middle (it overhangs
+     the 11px tab box vertically, which is fine because the glyph itself
+     is about 4px tall)" -- no `overflow: hidden` on the tab, so this is
+     free to overhang top/bottom by design, not a bug. */
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.75; /* matches the shelf star's own glyph weight (§7.6-adjacent) */
+}
+@media (hover: hover) {
+  .spotlight-branch-toggle:hover .spotlight-branch-toggle-tab {
+    background: var(--spotlight-hover-bg);
+  }
+  /* Showing, hover: --text-normal (the design spec) -- hidden's own accent
+     colour never changes on hover, per the rule directly above. */
+  .spotlight-branch-toggle:not(.is-hidden):hover .spotlight-branch-toggle-tab {
+    color: var(--text-normal);
+  }
+}
+/* the design spec: "Focus-visible: outline: 2px solid var(--spotlight-accent)
+   on the tab. Offset +1px is fine here because the toggle is outside the
+   shelf's own overflow clip" -- unlike the shelf's own controls (which use
+   -2px, clipped by `.spotlight-shelf { overflow: hidden }`), this band is
+   a sibling of the shelf, never inside it, so a positive offset is safe. */
+.spotlight-branch-toggle:focus-visible {
+  outline: none; /* the ring belongs to the tab (below), not the full-width band */
+}
+.spotlight-branch-toggle:focus-visible .spotlight-branch-toggle-tab {
+  outline: 2px solid var(--spotlight-accent);
+  outline-offset: 1px;
+}
+
+/* -------------------------------------------------------------- the HIDDEN
+   branch itself: a plugin class on `item.el` -- the SAME row the
+   shelf and the toggle above both already live on -- never Obsidian's own
+   `.is-collapsed` (that class also hides the SHELF, which must stay
+   visible while the branch is tucked away) and never a `display` rule on
+   `childrenEl` applied any other way (main.js never calls
+   `item.setCollapsed`/toggles `is-collapsed` for this, and never detaches
+   `childrenEl` -- see `applyBranchHiddenDomState`'s own doc comment). */
+.spotlight-branch-hidden > .tree-item-children {
+  display: none;
+}
+
+/* -------------------------------------------------------- the Overview row
+   RETIRED: an earlier version painted a visual "Overview" treatment
+   on a folder's own carrier note. `.spotlight-overview-row`/`-fill`/`-edge`/`-chip` and every
+   token this block used are gone from this file; `ensureOverviewMarkOnRow`
+   is gone from main.js. A folder with a same-named note today is an
+   ordinary folder row with its
+   star; the note inside it sorts wherever Obsidian's own native
+   order puts it. */
+
+/* ============================================================ §8 the
+   SETTINGS TAB redesign. Root cause of
+   the OLD layout: some themes draw a settings "card" by
+   styling each `.setting-item` in a flat plugin pane -- the count line and
+   the refusal notes were bare `<p>` elements between Setting rows, never
+   `.setting-item` themselves, so they got no ground and no side lines.
+   The fix is
+   structural, not cosmetic: every element that belongs to one directory
+   now lives inside ONE wrapper this plugin draws itself
+   (`.spotlight-dir-card`), so it reads as a real card under ANY theme,
+   including stock Obsidian, which draws no cards at all. */
+
+.spotlight-settings-section {
+  margin-bottom: var(--size-4-8); /* 32px between sections */
+}
+
+.spotlight-dir-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-3); /* 12px between cards */
+  padding: var(--size-4-4);
+  /* the section body follows the theme's own settings-card tokens where
+     it has them, transparent/0 otherwise -- never a Spotlight-invented
+     ground so a theme with no card styling draws nothing extra here. */
+  background: var(--setting-items-background, transparent);
+  border: var(--setting-items-border-width, 0px) solid var(--setting-items-border-color, transparent);
+  border-top: 0;
+  border-radius: 0 0 var(--setting-items-radius, 0px) var(--setting-items-radius, 0px);
+}
+
+.spotlight-dir-card {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: var(--size-4-3) var(--size-4-4) 0;
+}
+.spotlight-dir-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--size-4-2);
+}
+.spotlight-dir-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  flex: none;
+}
+.spotlight-dir-state {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+.spotlight-dir-path {
+  margin-top: var(--size-4-3);
+}
+.spotlight-dir-path-label {
+  display: block;
+  margin-bottom: var(--size-2-2);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  letter-spacing: var(--spotlight-kicker-tracking);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.spotlight-dir-path-input {
+  width: 100%;
+  font-family: var(--font-monospace);
+}
+/* Not unit-testable here — this
+   harness has no real layout engine, so the `scrollWidth > clientWidth`
+   condition that toggles this class is written correctly but unverified
+   by a test; see main.js's own doc comment on where it's applied): the
+   ONLY visual sign a non-focused, overflowing path field's text runs off
+   to the left. `#000` in the mask is an alpha channel, never a colour. */
+.spotlight-dir-path-input.is-overflowing {
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--size-4-6));
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--size-4-6));
+}
+.spotlight-dir-counts {
+  margin: var(--size-4-2) 0 0;
+  color: var(--spotlight-header-text); /* the contrast-safe accent step, same as the shelf header */
+  font-size: var(--font-ui-small);
+  font-weight: 500;
+}
+.spotlight-dir-card.is-off .spotlight-dir-counts {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* The inner Setting row ("Spotlight folders too"). Some themes' flat-pane
+   rule also paints this row as its own card piece (ground + side lines);
+   this needs Spotlight's own look instead -- a hairline ABOVE it, no
+   ground, no side borders, since it already lives inside
+   `.spotlight-dir-card`'s own frame. Such a theme's own selector specificity
+   for that rule is typically (0,3,0); this beats it at (0,4,0), never `!important`. */
+.spotlight-settings .spotlight-dir-card .setting-item.spotlight-dir-option {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--background-modifier-border);
+  margin: var(--size-4-3) calc(-1 * var(--size-4-4)) 0;
+  padding: var(--size-4-3) var(--size-4-4);
+}
+
+/* The pill (§5.5): the last segment of the root's own normalised path,
+   in a small kicker/pill voice -- mono, small capitals, spaced
+   letters, fully rounded, a 1px coloured outline, matching the style of a
+   theme's own kicker or pill elements.
+   Contrast floor: HARD 4.5:1 for the pill text and the count.
+   Dark clears it (5.63:1 pill text / 6.37:1 count -- see the
+   `--spotlight-pill-tint` token block's own doc comment, above, for the
+   full derivation). Light: FIXED --
+   a light-mode-only `--spotlight-pill-tint` override (6%, own token block
+   above) reads 4.80:1, a real margin over 4.5:1, computed against a real
+   installed theme's accent/background rather than an estimate.
+   The count line, on the card's own plain background rather than any
+   tint, was never affected either way. Stock Obsidian's default purple
+   accent has its own, older, separate known limit here too -- confirmed
+   by the same real math this fix used: 4.26:1 on a plain white card at
+   0% tint already fails the floor before any tint is even added, so no
+   tint value could ever close it (README) -- the pill/count read the
+   SAME `--spotlight-header-text` -> `--color-accent` chain the SPOTLIGHT
+   shelf header and the 0.12.0 warning text already use; that gap is
+   about the accent hue itself, not this rule's own tint, so it stays
+   open and untouched by this fix. */
+.spotlight-dir-pill {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--spotlight-pill-height);
+  padding: 0 var(--size-4-3);
+  border: 1px solid var(--spotlight-accent);
+  border-radius: var(--spotlight-pill-radius);
+  background: var(--spotlight-pill-tint); /* 6-13% accent tint, never stronger; light mode's own value, 0.15.2 */
+  color: var(--spotlight-header-text);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  font-weight: 500;
+  letter-spacing: var(--spotlight-kicker-tracking);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.spotlight-dir-card.is-off .spotlight-dir-pill {
+  background: transparent;
+  border-color: var(--background-modifier-border-hover);
+  color: var(--text-muted);
+}
+
+/* The empty-state guide (§5.7): shows whenever `settings.roots.length ===
+   0`, in ANY vault -- first-run ICOR detection (0.14.0) only decides what
+   `roots` starts with; this is purely a function of the current count,
+   checked fresh on every render, never a separate "first run" flag. */
+.spotlight-dir-empty {
+  border: 1px dashed var(--background-modifier-border-hover);
+  border-radius: var(--radius-m);
+  background: var(--background-primary);
+  padding: var(--size-4-4);
+  text-align: center;
+}
+.spotlight-dir-empty .spotlight-dir-empty-icon {
+  color: var(--spotlight-accent);
+  margin-bottom: var(--size-4-2);
+}
+.spotlight-dir-empty-title {
+  font-weight: 600;
+  margin: 0 0 var(--size-4-2);
+}
+.spotlight-dir-empty p {
+  margin: 0 0 var(--size-4-2);
+  color: var(--text-muted);
+}
+.spotlight-dir-empty code {
+  font-family: var(--font-monospace);
+}
+.spotlight-dir-empty-hint {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}

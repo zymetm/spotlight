@@ -1,0 +1,10 @@
+{
+  "id": "spotlight",
+  "name": "Spotlight",
+  "version": "0.16.0",
+  "minAppVersion": "1.7.2",
+  "description": "Star notes, folders, and files to surface them on a shelf at the top of their folder in the file explorer, without moving anything.",
+  "author": "Matt Zymet",
+  "authorUrl": "https://github.com/zymetm",
+  "isDesktopOnly": true
+}

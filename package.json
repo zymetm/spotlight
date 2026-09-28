@@ -1,0 +1,20 @@
+{
+  "name": "spotlight",
+  "version": "0.16.0",
+  "private": true,
+  "description": "Star notes, folders, and files to surface them on a shelf at the top of their folder in the file explorer, without moving anything.",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zymetm/spotlight"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "icor-for-life"
+  ],
+  "author": "Matt Zymet",
+  "license": "MIT"
+}
