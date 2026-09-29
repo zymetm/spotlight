@@ -3,6 +3,14 @@
 All notable changes to this plugin are documented here. Dates are when
 the change shipped.
 
+## 0.16.2 — 2026-09-28
+
+Fixed: clicking a tucked-away root's own folder row in the file
+explorer did nothing when that root sat at the top level of the vault
+(nothing above it to expand instead). Clicking the row now brings the
+shelf and files back, the same as clicking the show/hide tab underneath
+the shelf.
+
 ## 0.16.1 — 2026-09-28
 
 Pre-submission fixes for Obsidian's community plugin directory: the

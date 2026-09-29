@@ -2562,11 +2562,59 @@ function diffShelfRows(plugin, rootEntry, shelfEl, starred) {
  * EMPTY (no shelf can exist with zero starred items) still tears the
  * whole shelf down; every other change reconciles rows in place.
  */
+
+/**
+ * Clicking a branch-hidden root's own native row must bring its files
+ * back too -- the SAME effect the dedicated toggle tab already has.
+ * Before this, the row's own click only ever toggled Obsidian's native
+ * collapse state, which is entirely independent of
+ * `collapsedBranchRoots`: a tucked-away root stayed tucked away no
+ * matter how its own row was clicked, since nothing ever cleared the
+ * plugin's own hidden flag from that click -- from a member's own point
+ * of view the click did nothing, because native "collapsed" and the
+ * plugin's own "tucked away" are two different flags, and only one of
+ * them ever had a click wired to clear it.
+ *
+ * Wired ONCE per row: `selfEl` is a real, persistent Obsidian element
+ * that this plugin never recreates, so attaching a fresh listener on
+ * every reapply pass (this function runs on nearly every one) would
+ * accumulate a new listener forever. Reads `collapsedBranchRoots` fresh
+ * by path on every click, rather than closing over a `rootEntry`/
+ * `item` reference that could go stale after a settings reload
+ * (`reloadSettingsFromDisk()` replaces `plugin.settings` wholesale) or
+ * a view re-acquisition (`ensureExplorerViewConnected()` replaces
+ * `plugin.explorerView`) -- a path STRING captured at wire time stays
+ * correct regardless of either.
+ */
+function wireRootRowUntuck(plugin, rootPath, selfEl) {
+  if (!selfEl || selfEl._spotlightRootRowWired) return;
+  selfEl._spotlightRootRowWired = true;
+  selfEl.addEventListener('click', () => {
+    if (plugin._unloaded) return;
+    if (!(plugin.settings.collapsedBranchRoots || []).includes(rootPath)) return;
+    const view = plugin.explorerView;
+    const liveItem = view && view.fileItems && view.fileItems[rootPath];
+    if (!liveItem) return;
+    // Same three steps `toggleBranch()` (the tab, below) applies for an
+    // un-hide: the DOM class flip (which also un-hides the shelf, since
+    // an un-tucked-but-still-natively-collapsed root is the one case
+    // that class alone can't fix -- native collapse hides the shelf too,
+    // by design, and only a real expand clears that independently), the
+    // toggle band's own visual sync, and the persisted setting.
+    applyBranchHiddenDomState(plugin, liveItem, false);
+    const toggle = liveItem.el && liveItem.el.querySelector && liveItem.el.querySelector(':scope > .spotlight-branch-toggle');
+    if (toggle) syncBranchToggleEl(toggle, false);
+    plugin.setBranchHidden(rootPath, false).catch((err) => console.error('[spotlight] setBranchHidden failed (root row click)', err));
+  });
+}
+
 function renderShelfForRoot(plugin, rootEntry, starred) {
   const view = plugin.explorerView;
   if (!view || !view.fileItems) return;
   const item = view.fileItems[rootEntry.path];
   if (!item || !item.el || !item.childrenEl) return; // root not materialized yet
+
+  wireRootRowUntuck(plugin, rootEntry.path, item.selfEl);
 
   plugin._shelfSignatures = plugin._shelfSignatures || new Map();
   // Lazy-init the same way, for a caller (a test, or a
@@ -4406,6 +4454,7 @@ module.exports.__test = {
   positionRevealedRowOneThirdDown,
   unstarShelfEntity,
   handleShelfStarActivate,
+  wireRootRowUntuck,
   renderShelfForRoot,
   removeShelfForRoot,
   sweepOrphanShelves,

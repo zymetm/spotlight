@@ -4276,6 +4276,99 @@ test('branch toggle click, hidden -> showing: the reverse trip un-hides and pers
   assert.deepEqual(plugin.settings.collapsedBranchRoots, []);
 });
 
+/* ======================================================================
+ * A tucked-away root's own native row -- clicking it must un-tuck too,
+ * not just the dedicated toggle tab underneath the shelf. Before this,
+ * only the tab (and a shelf folder-row candidate) ever cleared
+ * `collapsedBranchRoots`; the root's own title row only ever toggled
+ * Obsidian's native collapse, entirely independent of that setting, so a
+ * tucked-away root at the vault's TOP LEVEL (nothing above it to expand
+ * instead) looked like clicking did nothing at all.
+ * ==================================================================== */
+
+test('root row click: a tucked root at vault top level un-tucks on its own row click, same as the toggle tab -- shelf and files come back', async () => {
+  const fixture = makeBranchToggleFixture({ collapsedBranchRoots: ['04 Inner World/My Life/Projects'] });
+  const { plugin, rootEl, rootEntry } = fixture;
+  const selfEl = makeFakeElement('div');
+  fixture.view.fileItems[rootEntry.path].selfEl = selfEl;
+
+  renderAllShelves(plugin);
+  assert.equal(rootEl.classList.contains('spotlight-branch-hidden'), true, 'starts tucked away');
+  const toggle = rootEl.querySelector(':scope > .spotlight-branch-toggle');
+  assert.equal(toggle.classList.contains('is-hidden'), true);
+
+  selfEl._fire('click', {});
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(rootEl.classList.contains('spotlight-branch-hidden'), false, 'the row click un-tucks the branch');
+  assert.equal(toggle.classList.contains('is-hidden'), false, 'the tab band stays in sync with the row click');
+  assert.deepEqual(plugin.settings.collapsedBranchRoots, [], 'persisted, not just the DOM class');
+  assert.deepEqual(plugin.saved.collapsedBranchRoots, [], 'actually written through saveData');
+});
+
+test('root row click: a tucked root that is ALSO natively collapsed un-tucks regardless -- the row click clears both flags in the same event, not just the native one', async () => {
+  const fixture = makeBranchToggleFixture({ collapsedBranchRoots: ['04 Inner World/My Life/Projects'] });
+  const { plugin, rootEl, rootEntry } = fixture;
+  const selfEl = makeFakeElement('div');
+  fixture.view.fileItems[rootEntry.path].selfEl = selfEl;
+  renderAllShelves(plugin);
+
+  // Simulates Obsidian's OWN native collapse-toggle listener, which also
+  // lives on this same row and fires on the same click -- native
+  // collapsed/expanded is a flag entirely separate from
+  // `collapsedBranchRoots`, and this plugin never touches it. Added
+  // here only so this test can assert wireRootRowUntuck's own listener
+  // does its job independent of whatever else is also listening on the
+  // row for the exact same click.
+  rootEl.classList.add('is-collapsed');
+  selfEl.addEventListener('click', () => rootEl.classList.remove('is-collapsed'));
+
+  selfEl._fire('click', {});
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(rootEl.classList.contains('is-collapsed'), false, 'native expand still happens (Obsidian\'s own listener)');
+  assert.equal(rootEl.classList.contains('spotlight-branch-hidden'), false, 'AND the tuck clears -- the real bug: this used to stay stuck');
+  assert.deepEqual(plugin.settings.collapsedBranchRoots, []);
+});
+
+test('root row click: wiring the row click leaves the toggle tab fully functional -- both click targets keep working, hide then un-tuck round trip', async () => {
+  const fixture = makeBranchToggleFixture();
+  const { plugin, rootEl, rootEntry } = fixture;
+  const selfEl = makeFakeElement('div');
+  fixture.view.fileItems[rootEntry.path].selfEl = selfEl;
+  renderAllShelves(plugin);
+  const toggle = rootEl.querySelector(':scope > .spotlight-branch-toggle');
+
+  toggle._fire('click', {}); // tab hides it, exactly as before this fix
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(rootEl.classList.contains('spotlight-branch-hidden'), true, 'the tab still hides on its own');
+  assert.deepEqual(plugin.settings.collapsedBranchRoots, [rootEntry.path]);
+
+  selfEl._fire('click', {}); // now the row's own click un-tucks it (this fix)
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(rootEl.classList.contains('spotlight-branch-hidden'), false, 'the row click un-tucks what the tab hid');
+  assert.deepEqual(plugin.settings.collapsedBranchRoots, []);
+});
+
+test('root row click: a click while the branch is already showing is a no-op -- never fights a plain expand/collapse for an untucked root', async () => {
+  const fixture = makeBranchToggleFixture(); // collapsedBranchRoots defaults to []
+  const { plugin, rootEl, rootEntry } = fixture;
+  const selfEl = makeFakeElement('div');
+  fixture.view.fileItems[rootEntry.path].selfEl = selfEl;
+  renderAllShelves(plugin);
+
+  selfEl._fire('click', {});
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(rootEl.classList.contains('spotlight-branch-hidden'), false, 'never hidden by its own row click');
+  assert.deepEqual(plugin.settings.collapsedBranchRoots, [], 'setBranchHidden is never even called when nothing was tucked');
+});
+
 /* ----------------------------------------------------------------------
  * Shelf row clicks while the branch is hidden -- passing the row's own `rootEntry` is what makes this
  * reachable at all; every OTHER call site (and every pre-0.13.0 test
