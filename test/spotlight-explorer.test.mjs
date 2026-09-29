@@ -2076,6 +2076,75 @@ test('renderShelfForRoot (0.13.6, condition C, live-verified residue): a shelf l
 });
 
 /* ======================================================================
+ * A live report ("clicking a starred item's star in the shelf, nothing
+ * happens... it's like the items the shelf loaded with are stuck until
+ * you unstar them directly from the file-explorer beneath the shelf").
+ * Root-caused live against a real running vault: Obsidian never
+ * recreates file-explorer rows across a plugin reload/update, so a
+ * shelf a PREVIOUS plugin instance built survives untouched -- every
+ * row's star closes over THAT instance, and `handleShelfStarActivate`'s
+ * own `plugin._unloaded` guard then silently no-ops the click forever
+ * (no write, no console output), exactly matching what was reported.
+ * `_spotlightOwnerPlugin` (set on the shelf when built) is how
+ * `renderShelfForRoot` tells a genuinely current shelf from one a
+ * reload left behind; these tests fake that exact residue -- a real
+ * fixture rebuild, then the shelf's own owner stamp swapped for a
+ * foreign marker, standing in for "a different, now-unloaded instance
+ * built this" -- without needing to spin up a second real plugin
+ * instance to prove it.
+ * ==================================================================== */
+
+test('renderShelfForRoot (0.16.2, live-verified residue): a shelf left over from a PREVIOUS plugin instance is fully rebuilt on the next pass, and its star -- a NOTE candidate, frontmatter-backed -- un-stars on a real click', async () => {
+  const { plugin, rootEl, stub } = makeShelfFixture();
+  renderAllShelves(plugin);
+  const shelfBefore = rootEl.querySelector(':scope > .spotlight-shelf');
+  assert.ok(shelfBefore);
+  const staleStarBefore = shelfBefore.querySelector(':scope > .spotlight-shelf-rows').querySelector(':scope > .spotlight-shelf-row').querySelector(':scope > .spotlight-shelf-star');
+
+  // Simulate exactly what a live reload leaves behind: the shelf DOM
+  // Obsidian never tore down, stamped by some OTHER, now-unloaded
+  // plugin instance.
+  shelfBefore._spotlightOwnerPlugin = { _unloaded: true, _fakeStaleInstance: true };
+
+  renderAllShelves(plugin); // the CURRENT instance's own next render pass
+  const shelfAfter = rootEl.querySelector(':scope > .spotlight-shelf');
+  assert.ok(shelfAfter, 'still starred -- the shelf still renders');
+  assert.equal(shelfAfter._spotlightOwnerPlugin, plugin, 'now stamped by the CURRENT instance');
+  const freshStar = shelfAfter.querySelector(':scope > .spotlight-shelf-rows').querySelector(':scope > .spotlight-shelf-row').querySelector(':scope > .spotlight-shelf-star');
+  assert.notEqual(freshStar, staleStarBefore, 'a genuinely new row/star, not the stale one reused in place');
+
+  // The bug, reproduced without the fix: clicking THIS star is exactly
+  // what "nothing happens" looked like, because its own listener closed
+  // over the stale, unloaded instance above. With the fix, this is a
+  // fresh row bound to the real, running `plugin` -- the click must
+  // actually un-star it.
+  freshStar._fire('click', makeFakeEvent({ isTrusted: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(getSpotlightState(plugin.app, stub), false, 'the real write landed -- a genuinely live row, not a stale one');
+});
+
+test('renderShelfForRoot (0.16.2, live-verified residue): the same stale-shelf residue, for a FOLDER candidate (data.json/starredPaths-backed) -- un-stars on a real click after the rebuild', async () => {
+  const { plugin, rootEl, bucket } = makeFolderShelfFixture();
+  renderAllShelves(plugin);
+  const shelfBefore = rootEl.querySelector(':scope > .spotlight-shelf');
+  assert.ok(shelfBefore);
+
+  shelfBefore._spotlightOwnerPlugin = { _unloaded: true, _fakeStaleInstance: true };
+
+  renderAllShelves(plugin);
+  const shelfAfter = rootEl.querySelector(':scope > .spotlight-shelf');
+  assert.equal(shelfAfter._spotlightOwnerPlugin, plugin);
+  const freshStar = shelfAfter.querySelector(':scope > .spotlight-shelf-rows').querySelector(':scope > .spotlight-shelf-row').querySelector(':scope > .spotlight-shelf-star');
+  assert.ok(freshStar);
+
+  freshStar._fire('click', makeFakeEvent({ isTrusted: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(isPathStarred(plugin, bucket.path), false, 'the path-store write landed too, same as the frontmatter case above');
+});
+
+/* ======================================================================
  * Auto-reveal -- a settings-tab line reporting whether at least one
  * file-explorer pane has "auto-reveal active file" on, with a one-way
  * "Turn off" button. Per-LEAF view state, read through the documented

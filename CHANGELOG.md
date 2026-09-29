@@ -3,6 +3,19 @@
 All notable changes to this plugin are documented here. Dates are when
 the change shipped.
 
+## 0.16.3 — 2026-09-28
+
+Fixed: after the plugin reloaded or updated without restarting Obsidian,
+clicking a star on the shelf for an item that was already starred
+before the reload did nothing -- no error, no change. Un-starring it a
+different way (through the file explorer directly) and re-starring it
+worked fine from then on. Every shelf now rebuilds cleanly the first
+time it renders after a reload, so this no longer happens.
+
+Also: release assets (`main.js`, `manifest.json`, `styles.css`) now
+carry a signed build-provenance attestation, verifiable with
+`gh attestation verify <file> --owner zymetm`.
+
 ## 0.16.2 — 2026-09-28
 
 Fixed: clicking a tucked-away root's own folder row in the file

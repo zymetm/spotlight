@@ -9,6 +9,14 @@ on:
 
 permissions:
   contents: write
+  # Lets actions/attest-build-provenance below record a signed
+  # attestation (GitHub's own Sigstore-backed transparency log) tying
+  # each release asset's exact bytes back to this workflow run and the
+  # commit it built from -- verifiable after the fact with
+  # `gh attestation verify main.js --owner zymetm`, independent of
+  # trusting the release page itself.
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -49,6 +57,14 @@ jobs:
           "
         env:
           TAG: ${{ github.ref_name }}
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
 
       - name: Create GitHub release (draft)
         env:

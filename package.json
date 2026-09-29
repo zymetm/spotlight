@@ -1,6 +1,6 @@
 {
   "name": "spotlight",
-  "version": "0.16.2",
+  "version": "0.16.3",
   "private": true,
   "description": "Star notes, folders, and files to surface them on a shelf at the top of their folder in the file explorer, without moving anything.",
   "scripts": {

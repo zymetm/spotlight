@@ -2635,7 +2635,7 @@ function renderShelfForRoot(plugin, rootEntry, starred) {
   // block above) and would throw here on the very first shelf rebuild
   // after a root's `spotlightFolders` toggle went on.
   const signature = JSON.stringify([rootEntry.spotlightFolders === true, starred.map((c) => candidatePath(c))]);
-  const existing = item.el.querySelector(':scope > .spotlight-shelf');
+  let existing = item.el.querySelector(':scope > .spotlight-shelf');
   // 0.13.6, live-verified residue:
   // a shelf built by a PRE-0.13.6 install (still sitting in the DOM --
   // Obsidian does not recreate file-explorer rows just because a plugin
@@ -2652,6 +2652,34 @@ function renderShelfForRoot(plugin, rootEntry, starred) {
   // run unconditionally, on every call, before either branch.
   if (existing && existing.style && typeof existing.style.removeProperty === 'function') {
     existing.style.removeProperty('--spotlight-shelf-indent');
+  }
+  // A live report ("clicking a starred item's star in the shelf,
+  // nothing happens... it's like the items the shelf loaded with are
+  // stuck"): the SAME residue the comment above already names, but
+  // for JS CLOSURES rather than inline CSS. Every row's star, the shelf
+  // header's own collapse toggle, and the branch toggle tab all close
+  // over `plugin` at build time (`buildShelfRow`, below); a shelf built
+  // by a PREVIOUS plugin instance -- a reload or an update installed
+  // without restarting Obsidian, which never recreates file-explorer
+  // rows on its own -- keeps every one of those closures bound to that
+  // OLD instance. `handleShelfStarActivate`'s own `plugin._unloaded`
+  // guard then silently no-ops a star click on a row that survived the
+  // reload: no write, no console output at all, nothing visibly
+  // happens. The row only recovers once some OTHER route (unstarring
+  // directly via the note's own frontmatter or the path store) removes
+  // it, so a later re-star builds a brand new row through the CURRENT
+  // instance instead. `_spotlightOwnerPlugin`, set on the shelf itself
+  // when built (below), names which instance built it; a mismatch means
+  // EVERY closure in this shelf predates this one, not just whichever
+  // rows a member happens to re-star first -- so the whole shelf (and
+  // its toggle) is torn down here, once, on the first render pass after
+  // a fresh load or reload, and rebuilt below exactly like no shelf ever
+  // existed, every closure freshly bound to the instance now running.
+  if (existing && existing._spotlightOwnerPlugin !== plugin) {
+    existing.remove();
+    const staleToggle = item.el.querySelector && item.el.querySelector(':scope > .spotlight-branch-toggle');
+    if (staleToggle) staleToggle.remove();
+    existing = null;
   }
   if (plugin._shelfSignatures.get(rootEntry.path) === signature && (existing || starred.length === 0)) {
     // Unchanged since the last render -- zero DOM mutation on the SHELF
@@ -2733,6 +2761,14 @@ function renderShelfForRoot(plugin, rootEntry, starred) {
   const shelf = document.createElement('div');
   shelf.className = collapsed ? 'spotlight-shelf is-collapsed' : 'spotlight-shelf';
   shelf.setAttribute('data-spotlight-shelf-root', rootEntry.path);
+  // Names the plugin instance that built this shelf -- the stale-instance
+  // check above reads this back on every later call to tell a genuinely
+  // current shelf from one a reload left behind. A plain instance
+  // property, never a DOM attribute: nothing
+  // outside this plugin's own next call needs to read it, and a real
+  // object reference (not a stringified id) is the simplest possible
+  // "is this the SAME instance" test.
+  shelf._spotlightOwnerPlugin = plugin;
   // 0.13.6: no inline
   // `--spotlight-shelf-indent` set here any more -- `styles.css`'s own
   // `margin-inline-start` now reads `--nav-item-children-margin-start`
