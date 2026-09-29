@@ -465,7 +465,7 @@ test('settings tab (0.14.0 empty-guide plumbing, REVISED 0.15.0 -- the mockup\'s
   assert.equal(guideEls.length, 1, 'the guide shows -- roots.length === 0');
 
   // 0.15.0: the redesigned guide keeps
-  // only "Go to the Add field," no Dismiss button -- the guide's own
+  // only "Go to the add field," no Dismiss button -- the guide's own
   // visibility no longer consults `guideDismissed` at all, a real,
   // named behaviour change, not a bug. `dismissGuide()`
   // itself is gone too now -- nothing calls it any more (no button wires

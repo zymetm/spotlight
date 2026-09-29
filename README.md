@@ -117,11 +117,11 @@ mistaken for a deletion).
 
 ## Settings reference
 
-**Add Spotlight to this directory** — type a folder path and click Add.
+**Add a directory** — type a folder path and click Add.
 Refused if the path is already covered by, or would nest inside/around,
 an existing root.
 
-**Active Spotlight directories** — one card per configured root:
+**Active directories** — one card per configured root:
 
 * **Toggle** — track this root or not.
 * **Trash icon** — remove this root from settings. A note's own

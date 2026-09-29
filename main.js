@@ -236,7 +236,7 @@ async function detectIcorScaffold(app) {
     const raw = await adapter.read(manifestPath);
     const parsed = JSON.parse(raw);
     return !!(parsed && parsed.name === 'ICOR for Life Scaffold' && typeof parsed.implements === 'string' && parsed.implements.startsWith('icor-concepts/'));
-  } catch (err) {
+  } catch {
     return false;
   }
 }
@@ -1916,7 +1916,7 @@ function guardScrollAcrossHiddenBranchReveal(plugin, node) {
       plugin._revealGuardRef = null;
     }
     if (plugin._revealGuardTimeoutId) {
-      clearTimeout(plugin._revealGuardTimeoutId);
+      window.clearTimeout(plugin._revealGuardTimeoutId);
       plugin._revealGuardTimeoutId = null;
     }
     plugin._revealGuardRef = workspace.on('file-open', (openedFile) => {
@@ -1927,7 +1927,7 @@ function guardScrollAcrossHiddenBranchReveal(plugin, node) {
       workspace.offref(plugin._revealGuardRef);
       plugin._revealGuardRef = null;
       if (plugin._revealGuardTimeoutId) {
-        clearTimeout(plugin._revealGuardTimeoutId);
+        window.clearTimeout(plugin._revealGuardTimeoutId);
         plugin._revealGuardTimeoutId = null;
       }
       if (plugin._unloaded) return;
@@ -1943,7 +1943,7 @@ function guardScrollAcrossHiddenBranchReveal(plugin, node) {
     // failure the tracked ref above fixes for a rapid double-click,
     // triggered a different way. ~1s is generously longer than any real
     // 'file-open' this click could still be waiting on.
-    plugin._revealGuardTimeoutId = setTimeout(() => {
+    plugin._revealGuardTimeoutId = window.setTimeout(() => {
       plugin._revealGuardTimeoutId = null;
       if (plugin._revealGuardRef) {
         workspace.offref(plugin._revealGuardRef);
@@ -3226,7 +3226,7 @@ class SpotlightPlugin extends Plugin {
     this._unloaded = true;
 
     if (this._reapplyBackstopId) {
-      clearTimeout(this._reapplyBackstopId);
+      window.clearTimeout(this._reapplyBackstopId);
       this._reapplyBackstopId = null;
     }
     this._reapplyScheduled = false;
@@ -3242,7 +3242,7 @@ class SpotlightPlugin extends Plugin {
     }
     this._revealGuardRef = null;
     if (this._revealGuardTimeoutId) {
-      clearTimeout(this._revealGuardTimeoutId);
+      window.clearTimeout(this._revealGuardTimeoutId);
       this._revealGuardTimeoutId = null;
     }
 
@@ -3393,7 +3393,7 @@ class SpotlightPlugin extends Plugin {
         let appeared = false;
         try {
           appeared = await adapter.exists(normalizePath(`${dir}/data.json`));
-        } catch (err) {
+        } catch {
           appeared = false;
         }
         if (appeared) {
@@ -3688,12 +3688,12 @@ class SpotlightPlugin extends Plugin {
     this._reapplyScheduled = true;
     const run = () => {
       if (!this._reapplyScheduled) return;
-      clearTimeout(this._reapplyBackstopId);
+      window.clearTimeout(this._reapplyBackstopId);
       this._reapplyBackstopId = null;
       this._reapplyScheduled = false;
       this.runReapply();
     };
-    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb) => setTimeout(cb, 0);
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb) => window.setTimeout(cb, 0);
     // Tracked on the instance
     // so `onunload()` can cancel it outright — an untracked timer fired
     // by a pending reapply could otherwise still run after unload,
@@ -3706,7 +3706,7 @@ class SpotlightPlugin extends Plugin {
     // `clearTimeout(this._reapplyBackstopId)` covers it.
     const arm = () => {
       raf(run);
-      this._reapplyBackstopId = setTimeout(run, 250);
+      this._reapplyBackstopId = window.setTimeout(run, 250);
     };
     this._reapplyPassLog = this._reapplyPassLog || [];
     const now = Date.now();
@@ -3715,7 +3715,7 @@ class SpotlightPlugin extends Plugin {
       arm();
     } else {
       const lastPassAt = this._reapplyPassLog[this._reapplyPassLog.length - 1] || 0;
-      this._reapplyBackstopId = setTimeout(arm, Math.max(0, lastPassAt + REAPPLY_MIN_INTERVAL_MS - now));
+      this._reapplyBackstopId = window.setTimeout(arm, Math.max(0, lastPassAt + REAPPLY_MIN_INTERVAL_MS - now));
     }
   }
 
@@ -3926,7 +3926,7 @@ class SpotlightSettingTab extends PluginSettingTab {
   renderAddSection() {
     const el = this.addSectionEl;
     el.empty();
-    new Setting(el).setName('Add Spotlight to this directory').setHeading();
+    new Setting(el).setName('Add a directory').setHeading();
 
     let newRootValue = '';
     const addRowEl = el.createDiv();
@@ -3951,7 +3951,7 @@ class SpotlightSettingTab extends PluginSettingTab {
           newRootValue = value;
           applyCheck(value);
         });
-        // §5.7's own "Go to the Add field" button (the empty-state
+        // §5.7's own "Go to the add field" button (the empty-state
         // guide, rendered by `renderRootsList()` below) reaches this
         // exact field through this reference.
         this.addRootTextComponent = text;
@@ -3985,8 +3985,8 @@ class SpotlightSettingTab extends PluginSettingTab {
     const el = this.directoriesSectionEl;
     el.empty();
     new Setting(el)
-      .setName('Active Spotlight directories')
-      .setDesc('Each folder below gets a SPOTLIGHT shelf at the top of its branch in the file explorer.')
+      .setName('Active directories')
+      .setDesc('Each folder below gets a Spotlight shelf at the top of its branch in the file explorer.')
       .setHeading();
 
     const settings = this.plugin.settings;
@@ -4184,7 +4184,7 @@ class SpotlightSettingTab extends PluginSettingTab {
 
   /** Shows whenever `settings.roots.length
    * === 0`, in ANY vault, replacing an earlier plain-text guide
-   * (see `renderRootsList()`'s own doc comment). This guide keeps only "Go to the Add field," not a
+   * (see `renderRootsList()`'s own doc comment). This guide keeps only "Go to the add field," not a
    * Dismiss button -- so `settings.guideDismissed` (an earlier field,
    * kept in the settings shape so existing data.json doesn't lose the
    * key) is now read nowhere in THIS render; the guide shows purely from
@@ -4200,7 +4200,7 @@ class SpotlightSettingTab extends PluginSettingTab {
     const exampleEl = guideEl.createEl('p', { text: 'For example: ' });
     exampleEl.createEl('code', { text: 'Projects' });
     new Setting(guideEl).addButton((btn) =>
-      btn.setButtonText('Go to the Add field').onClick(() => {
+      btn.setButtonText('Go to the add field').onClick(() => {
         const inputEl = this.addRootTextComponent && this.addRootTextComponent.inputEl;
         if (!inputEl) return;
         if (typeof inputEl.scrollIntoView === 'function') inputEl.scrollIntoView();
@@ -4309,7 +4309,7 @@ class SpotlightSettingTab extends PluginSettingTab {
       // colour invented for this one.
       noteEl.createEl('p', {
         text:
-          "With a branch hidden (the tab below the SPOTLIGHT shelf), auto-reveal can jump the Files panel to an invisible row. Turn it off here, or back on any time from the Files panel's own auto-reveal button.",
+          "With a branch hidden (the tab below the Spotlight shelf), auto-reveal can jump the Files panel to an invisible row. Turn it off here, or back on any time from the Files panel's own auto-reveal button.",
         cls: ['spotlight-settings-note', 'spotlight-settings-error'],
       });
       setting.addButton((btn) =>

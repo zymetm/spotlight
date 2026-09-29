@@ -1332,7 +1332,7 @@ export function loadPlugin({ requestAnimationFrame: rafOverride, MutationObserve
   const moduleObj = { exports: {} };
   const fn = vm.compileFunction(
     source,
-    ['require', 'module', 'exports', 'console', 'document', 'MutationObserver', 'requestAnimationFrame', 'getComputedStyle'],
+    ['require', 'module', 'exports', 'console', 'document', 'window', 'MutationObserver', 'requestAnimationFrame', 'getComputedStyle'],
     { filename: 'main.js' },
   );
   fn(
@@ -1341,6 +1341,22 @@ export function loadPlugin({ requestAnimationFrame: rafOverride, MutationObserve
     moduleObj.exports,
     console,
     fakeDocument,
+    // main.js now calls `window.setTimeout`/`window.clearTimeout`
+    // (eslint-plugin-obsidianmd's no-bare-timer rule) instead of the
+    // bare globals -- this harness has no real browser `window`, so it
+    // provides one. Each method reads `globalThis.<name>` at CALL time,
+    // not once here at load time, so a test that swaps in Node's own
+    // mock timers afterward (`t.mock.timers.enable()`, which patches
+    // `globalThis.setTimeout` in place) still reaches the mock -- a
+    // stub that captured the real functions once, upfront, would keep
+    // calling the ORIGINAL timers forever, deaf to a mock installed
+    // later in the very same process.
+    {
+      setTimeout: (...args) => globalThis.setTimeout(...args),
+      clearTimeout: (...args) => globalThis.clearTimeout(...args),
+      setInterval: (...args) => globalThis.setInterval(...args),
+      clearInterval: (...args) => globalThis.clearInterval(...args),
+    },
     // `undefined` by default (still exercises
     // main.js's own `typeof MutationObserver !== 'undefined'` guard in
     // `installRowInjection`). A real constructor can be passed too, to

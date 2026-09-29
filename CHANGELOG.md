@@ -3,6 +3,15 @@
 All notable changes to this plugin are documented here. Dates are when
 the change shipped.
 
+## 0.16.1 — 2026-09-28
+
+Pre-submission fixes for Obsidian's community plugin directory: the
+settings tab's two section headings no longer name the plugin ("Add
+Spotlight to this directory" → "Add a directory"; "Active Spotlight
+directories" → "Active directories"), two labels now use sentence
+case, timers now go through `window.setTimeout`/`window.clearTimeout`,
+and two unused error bindings were dropped. No behavior change.
+
 ## 0.16.0 — 2026-09-28
 
 First public release, under the name **Spotlight** (renamed from
