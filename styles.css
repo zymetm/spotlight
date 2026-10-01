@@ -894,3 +894,46 @@
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
 }
+
+/* ------------------------------------------------- mobile tap targets (m3s)
+   Matt's ruling m3s (2026-10-01): everything in this block applies ONLY on
+   mobile (Android and iOS, phone and tablet) -- every selector starts at
+   `body.is-mobile`, so desktop is untouched. Measured in Obsidian's mobile
+   emulation: explorer rows are 36px tall at 16px text; the inline star's box
+   sits [-2px, +21px] across the row's own left edge with the collapse arrow
+   starting at +21px, so it already neither overlaps the arrow nor clips at
+   the pane edge -- only its tap area is too small. */
+
+/* Inline star: ~44px wide tap area, the full row tall (never past the row --
+   taller would steal taps from the rows above and below), growing LEFT into
+   the empty indent gutter and never right, where the collapse arrow starts. */
+body.is-mobile .spotlight-star::after {
+  inset: -6px 0 -6px -21px;
+}
+/* Phone rows are 40px tall (tablet 36px): the tap area is the full row. */
+body.is-phone .spotlight-star::after {
+  inset: -8px 0 -8px -21px;
+}
+
+/* Shelf rows: a real 44px-tall tap row. */
+body.is-mobile .spotlight-shelf-row {
+  min-height: 44px;
+  padding-block: 0; /* the 44px star below sets the row's height */
+}
+body.is-mobile .spotlight-shelf-header {
+  min-height: 44px;
+  box-sizing: border-box;
+}
+/* Shelf star: a 44px-tall, wider tap area. The box grows left into the
+   fence's own 8px padding and right over the 6px gap; a later sibling (the
+   kind icon / title) paints above it, so it never steals a tap from them.
+   The glyph itself stays exactly where it was. */
+body.is-mobile .spotlight-shelf-star {
+  box-sizing: border-box;
+  width: 36px;
+  height: 44px;
+  margin-inline: -8px -13px;
+  padding-inline-start: 8px;
+  justify-content: flex-start;
+  align-items: center;
+}

@@ -1125,8 +1125,18 @@ function makeObsidian() {
       this._events.push(e);
     }
     addSettingTab() {}
+    // mobile-support: a stand-in for the real `Plugin.addCommand`; a test
+    // reads `plugin._commands` to see what the plugin registered.
+    addCommand(cmd) {
+      (this._commands = this._commands || []).push(cmd);
+      return cmd;
+    }
   }
   const obsidianModule = {
+    // mobile-support (ruling m3s): the real `Platform` export. Every flag is
+    // desktop by default; a test flips `obsidian.Platform.isMobile` /
+    // `.isPhone` at runtime, which main.js reads at call time.
+    Platform: { isMobile: false, isPhone: false, isTablet: false, isDesktop: true, isDesktopApp: true, isIosApp: false, isAndroidApp: false },
     Plugin: class extends Component {
       constructor(app, manifest) {
         super();
@@ -1187,6 +1197,9 @@ function makeObsidian() {
       }
       showAtMouseEvent(evt) {
         this._shownAtEvent = evt;
+      }
+      showAtPosition(pos) {
+        this._shownAtPosition = pos;
       }
     },
     // Synchronous passthrough — a gate cares that the eventual call

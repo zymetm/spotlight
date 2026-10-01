@@ -52,7 +52,17 @@
 
 'use strict';
 
-const { Plugin, PluginSettingTab, Setting, Notice, Menu, getFrontMatterInfo, debounce, setIcon, normalizePath } = require('obsidian');
+const { Plugin, PluginSettingTab, Setting, Notice, Menu, Platform, getFrontMatterInfo, debounce, setIcon, normalizePath } = require('obsidian');
+
+/* Mobile support (Matt's ruling m3s, 2026-10-01): every UI/UX change made
+ * for mobile applies ONLY on mobile -- Android and iOS, phone and tablet --
+ * and desktop behaves and looks exactly as before. JS gates read
+ * `Platform.isMobile` at CALL time (never cached at
+ * load), and never an iOS-only check. The CSS side is gated under
+ * `body.is-mobile` / `body.is-phone` in styles.css. */
+function isMobileApp() {
+  return !!(Platform && Platform.isMobile);
+}
 
 /* ========================================================================
  * Settings model — the root list
@@ -1163,6 +1173,28 @@ function addSpotlightMenuItem(plugin, menu, file) {
   });
 }
 
+/** The "Star or unstar this note" command's action (mobile only -- see
+ * `onload()`): flips the star on the note open in the active pane, through
+ * the same candidate helpers the context menu uses. A note outside every
+ * Spotlight root gets a short notice, never a silent no-op. */
+async function toggleActiveNoteStar(plugin) {
+  if (plugin._unloaded) return;
+  const workspace = plugin.app && plugin.app.workspace;
+  const file = workspace && typeof workspace.getActiveFile === 'function' ? workspace.getActiveFile() : null;
+  const candidate = file ? resolveSpotlightTarget(plugin, file) : null;
+  if (!candidate) {
+    new Notice('This note is not inside a Spotlight folder.');
+    return;
+  }
+  try {
+    await toggleCandidateSpotlight(plugin, candidate);
+    plugin.requestExplorerSort();
+    plugin.scheduleStarReapply();
+  } catch (err) {
+    console.error('[spotlight] toggleActiveNoteStar failed', err);
+  }
+}
+
 /** Obtains the file-explorer's live view: the leaf, then
  * `loadIfDeferred()` before touching anything else (a leaf can be a
  * placeholder with none of the real view's methods until loaded, since
@@ -2062,6 +2094,71 @@ function revealEntityCandidate(plugin, candidate, rootEntry) {
   }
 }
 
+/** The right-click / long-press menu of a shelf row: one item, "Remove from
+ * Spotlight". Shared by the desktop contextmenu route (unchanged) and the
+ * mobile long-press route. */
+function buildShelfRowMenu(plugin, candidate) {
+  const menu = new Menu();
+  menu.addItem((menuItem) =>
+    menuItem
+      .setTitle('Remove from Spotlight')
+      .setIcon('star')
+      .onClick(() => unstarShelfEntity(plugin, candidate)),
+  );
+  return menu;
+}
+
+/* Mobile long-press on a shelf row. Obsidian's Android webview may fire its
+ * own contextmenu on a long-press and iOS's does not, so a touch timer covers
+ * both and the two routes dedupe through `_spotlightLongPressAt`. The timer
+ * is a little longer than the native one so, where a native contextmenu
+ * exists, it wins. */
+const SHELF_LONG_PRESS_MS = 550;
+const SHELF_LONG_PRESS_SLOP_PX = 10;
+const SHELF_LONG_PRESS_CLICK_GUARD_MS = 800;
+
+function recentlyLongPressed(row) {
+  return typeof row._spotlightLongPressAt === 'number' && Date.now() - row._spotlightLongPressAt < SHELF_LONG_PRESS_CLICK_GUARD_MS;
+}
+
+function cancelShelfLongPress(row) {
+  if (row._spotlightLongPressTimer) {
+    window.clearTimeout(row._spotlightLongPressTimer);
+    row._spotlightLongPressTimer = null;
+  }
+}
+
+function attachShelfLongPress(row, openMenuAt) {
+  let startX = 0;
+  let startY = 0;
+  row.addEventListener(
+    'touchstart',
+    (evt) => {
+      cancelShelfLongPress(row);
+      if (!evt.touches || evt.touches.length !== 1) return;
+      startX = evt.touches[0].clientX;
+      startY = evt.touches[0].clientY;
+      row._spotlightLongPressTimer = window.setTimeout(() => {
+        row._spotlightLongPressTimer = null;
+        if (recentlyLongPressed(row)) return;
+        row._spotlightLongPressAt = Date.now();
+        openMenuAt({ x: startX, y: startY });
+      }, SHELF_LONG_PRESS_MS);
+    },
+    { passive: true },
+  );
+  row.addEventListener(
+    'touchmove',
+    (evt) => {
+      const t = evt.touches && evt.touches[0];
+      if (t && (Math.abs(t.clientX - startX) > SHELF_LONG_PRESS_SLOP_PX || Math.abs(t.clientY - startY) > SHELF_LONG_PRESS_SLOP_PX)) cancelShelfLongPress(row);
+    },
+    { passive: true },
+  );
+  row.addEventListener('touchend', () => cancelShelfLongPress(row), { passive: true });
+  row.addEventListener('touchcancel', () => cancelShelfLongPress(row), { passive: true });
+}
+
 /** The shelf's own "Remove from Spotlight" action, factored out of the
  * Menu-wiring below it so it's directly callable/testable without
  * simulating a real contextmenu -> Menu -> MenuItem round trip.
@@ -2424,7 +2521,11 @@ function buildShelfRow(plugin, rootEntry, candidate, rows, header) {
     }
   };
 
-  row.addEventListener('click', () => revealEntityCandidate(plugin, candidate, rootEntry));
+  row.addEventListener('click', () => {
+    // Mobile only: the tap that ends a long-press must not also open the row.
+    if (isMobileApp() && recentlyLongPressed(row)) return;
+    revealEntityCandidate(plugin, candidate, rootEntry);
+  });
   title.addEventListener('keydown', (evt) => {
     if (evt.key !== 'Enter' && evt.key !== ' ') return;
     evt.preventDefault();
@@ -2433,6 +2534,7 @@ function buildShelfRow(plugin, rootEntry, candidate, rows, header) {
   star.addEventListener('click', (evt) => {
     evt.stopPropagation();
     evt.preventDefault();
+    if (isMobileApp() && recentlyLongPressed(row)) return; // the lift-off of a long-press on the star
     moveFocusBeforeRemoval();
     handleShelfStarActivate(plugin, candidate, evt).catch((err) => console.error('[spotlight] unhandled handleShelfStarActivate rejection', err));
   });
@@ -2445,14 +2547,20 @@ function buildShelfRow(plugin, rootEntry, candidate, rows, header) {
   });
   row.addEventListener('contextmenu', (evt) => {
     evt.preventDefault();
-    const menu = new Menu();
-    menu.addItem((menuItem) =>
-      menuItem
-        .setTitle('Remove from Spotlight')
-        .setIcon('star')
-        .onClick(() => unstarShelfEntity(plugin, candidate)),
-    );
+    if (isMobileApp()) {
+      // Some mobile webviews (Android) fire a native contextmenu on a
+      // long-press; this claims it so the touch timer below does not open a
+      // second menu on top of it.
+      cancelShelfLongPress(row);
+      if (recentlyLongPressed(row)) return;
+      row._spotlightLongPressAt = Date.now();
+    }
+    const menu = buildShelfRowMenu(plugin, candidate);
     if (typeof menu.showAtMouseEvent === 'function') menu.showAtMouseEvent(evt);
+  });
+  if (isMobileApp()) attachShelfLongPress(row, (pos) => {
+    const menu = buildShelfRowMenu(plugin, candidate);
+    if (typeof menu.showAtPosition === 'function') menu.showAtPosition(pos);
   });
 
   return row;
@@ -3099,6 +3207,18 @@ class SpotlightPlugin extends Plugin {
     this.settingTab = new SpotlightSettingTab(this.app, this);
     this.addSettingTab(this.settingTab);
     this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => addSpotlightMenuItem(this, menu, file)));
+    // Mobile only (ruling m3s): a command phones and tablets can put on the
+    // mobile toolbar. Not registered on desktop, so desktop's command list
+    // stays exactly as it was.
+    if (isMobileApp() && typeof this.addCommand === 'function') {
+      this.addCommand({
+        id: 'toggle-star-active-note',
+        name: 'Star or unstar this note',
+        callback: () => {
+          toggleActiveNoteStar(this).catch((err) => console.error('[spotlight] unhandled toggleActiveNoteStar rejection', err));
+        },
+      });
+    }
 
     // Registered ONCE, here, for the plugin's whole lifetime — moved out
     // of installFileExplorerIntegration()'s own installRowInjection() step
@@ -4409,6 +4529,11 @@ class SpotlightSettingTab extends PluginSettingTab {
 module.exports = SpotlightPlugin;
 module.exports.default = SpotlightPlugin;
 module.exports.__test = {
+  // mobile support (m3s)
+  isMobileApp,
+  toggleActiveNoteStar,
+  buildShelfRowMenu,
+  platformSnapshot: () => ({ isMobile: isMobileApp(), isPhone: !!(Platform && Platform.isPhone), isTablet: !!(Platform && Platform.isTablet) }),
   // settings model
   defaultSettings,
   migrateSettings,
