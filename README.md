@@ -185,6 +185,9 @@ differently there: long-press a shelf row to remove it (there is no
 right-click), a "Star or unstar this note" command is available for
 Obsidian's mobile toolbar, and the shelf's tap targets are larger.
 Desktop looks and behaves exactly as before.
+
+<img src="docs/images/listing/mobile-topics-shelf-listing.png" alt="Spotlight on iPhone: the Topics shelf expanded in the file explorer, with three starred notes" width="300"> <img src="docs/images/listing/mobile-habits-projects-shelves-listing.png" alt="Spotlight on iPhone: the Habits shelf expanded and the Projects shelf collapsed" width="300">
+
 * **Depends on Obsidian's internal file-explorer structure, not only its
 public API.** The shelf is drawn directly into the file explorer's own
 internal row structure (its per-file DOM elements and its virtualized
