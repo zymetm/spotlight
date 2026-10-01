@@ -2135,6 +2135,7 @@ function attachShelfLongPress(row, openMenuAt) {
     'touchstart',
     (evt) => {
       cancelShelfLongPress(row);
+      row._spotlightLongPressTouch = false;
       if (!evt.touches || evt.touches.length !== 1) return;
       startX = evt.touches[0].clientX;
       startY = evt.touches[0].clientY;
@@ -2142,6 +2143,7 @@ function attachShelfLongPress(row, openMenuAt) {
         row._spotlightLongPressTimer = null;
         if (recentlyLongPressed(row)) return;
         row._spotlightLongPressAt = Date.now();
+        row._spotlightLongPressTouch = true;
         openMenuAt({ x: startX, y: startY });
       }, SHELF_LONG_PRESS_MS);
     },
@@ -2155,7 +2157,23 @@ function attachShelfLongPress(row, openMenuAt) {
     },
     { passive: true },
   );
-  row.addEventListener('touchend', () => cancelShelfLongPress(row), { passive: true });
+  // touchend is the one non-passive listener (preventDefault below): a hold past
+  // the 800ms click guard must not let the lift open the note, nor start a
+  // second system menu (Android touch-and-hold). If the timer had already
+  // fired for this touch, swallow the lift and re-stamp the guard at lift.
+  row.addEventListener(
+    'touchend',
+    (evt) => {
+      const fired = row._spotlightLongPressTouch === true; // the timer already opened the menu for this touch
+      cancelShelfLongPress(row);
+      if (fired) {
+        if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
+        row._spotlightLongPressAt = Date.now();
+        row._spotlightLongPressTouch = false;
+      }
+    },
+    { passive: false },
+  );
   row.addEventListener('touchcancel', () => cancelShelfLongPress(row), { passive: true });
 }
 
@@ -3214,8 +3232,12 @@ class SpotlightPlugin extends Plugin {
       this.addCommand({
         id: 'toggle-star-active-note',
         name: 'Star or unstar this note',
-        callback: () => {
-          toggleActiveNoteStar(this).catch((err) => console.error('[spotlight] unhandled toggleActiveNoteStar rejection', err));
+        // checkCallback: hidden when no markdown note is open.
+        checkCallback: (checking) => {
+          const file = this.app && this.app.workspace && typeof this.app.workspace.getActiveFile === 'function' ? this.app.workspace.getActiveFile() : null;
+          if (!file || file.extension !== 'md') return false;
+          if (!checking) toggleActiveNoteStar(this).catch((err) => console.error('[spotlight] unhandled toggleActiveNoteStar rejection', err));
+          return true;
         },
       });
     }

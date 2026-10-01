@@ -904,7 +904,8 @@
    starting at +21px, so it already neither overlaps the arrow nor clips at
    the pane edge -- only its tap area is too small. */
 
-/* Inline star: ~44px wide tap area, the full row tall (never past the row --
+/* Inline star: ~44px wide tap area (21px of gutter + the 23px star box at 16px
+   text), the row's full height (36px tablet, 40px phone), never past the row --
    taller would steal taps from the rows above and below), growing LEFT into
    the empty indent gutter and never right, where the collapse arrow starts. */
 body.is-mobile .spotlight-star::after {
@@ -915,8 +916,12 @@ body.is-phone .spotlight-star::after {
   inset: -8px 0 -8px -21px;
 }
 
-/* Shelf rows: a real 44px-tall tap row. */
+/* Shelf rows: a real 44px-tall tap row. No text selection / iOS callout, so a
+   long-press opens the Remove menu instead of selecting the title. */
 body.is-mobile .spotlight-shelf-row {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   min-height: 44px;
   padding-block: 0; /* the 44px star below sets the row's height */
 }

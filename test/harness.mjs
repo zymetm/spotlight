@@ -660,8 +660,9 @@ export function makeFakeElement(tagName) {
       walk(el);
       return results;
     },
-    addEventListener: (evt, handler) => {
+    addEventListener: (evt, handler, options) => {
       (listeners[evt] || (listeners[evt] = [])).push(handler);
+      (el._listenerOptions || (el._listenerOptions = {}))[evt] = options; // test-only: lets a test assert { passive }
     },
     removeEventListener: (evt, handler) => {
       if (!listeners[evt]) return;

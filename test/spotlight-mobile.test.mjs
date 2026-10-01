@@ -63,7 +63,9 @@ test('mobile: the command is registered once and starring/unstarring the active 
   assert.equal(cmds[0].name, 'Star or unstar this note');
   plugin.settings.roots = [{ path: '04 Inner World/My Life/Projects', enabled: true, spotlightFolders: false }];
   plugin.app.workspace.getActiveFile = () => stub;
-  await cmds[0].callback();
+  assert.equal(cmds[0].callback, undefined, 'uses checkCallback, not callback');
+  assert.equal(cmds[0].checkCallback(true), true, 'visible when a markdown note is open');
+  assert.equal(cmds[0].checkCallback(false), true);
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(lp.__test.getSpotlightState(plugin.app, stub), false, 'the starred note was unstarred');
 });
@@ -96,6 +98,40 @@ test('mobile: moving the finger cancels the long-press; the tap that ends a long
   row._fire('click', {});
 });
 
+test('mobile: the star command is hidden (checkCallback false, no notice, no write) when no markdown note is open', async () => {
+  const { plugin, stub } = makeFixture({ mobile: true });
+  await plugin.onload();
+  const cmd = plugin._commands[0];
+  plugin.app.workspace.getActiveFile = () => null;
+  assert.equal(cmd.checkCallback(true), false);
+  assert.equal(cmd.checkCallback(false), false);
+  plugin.app.workspace.getActiveFile = () => ({ ...stub, extension: 'png', path: 'a.png' });
+  assert.equal(cmd.checkCallback(true), false, 'a non-markdown file hides it too');
+});
+
+test('mobile: touchend is non-passive; a lift after the long-press fired is swallowed and re-stamps the click guard', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { row } = makeFixture({ mobile: true });
+  assert.equal(row._listenerOptions.touchend.passive, false);
+  assert.equal(row._listenerOptions.touchstart.passive, true);
+  assert.equal(row._listenerOptions.touchmove.passive, true);
+  row._fire('touchstart', touch(30, 40));
+  t.mock.timers.tick(600);
+  const openedAt = row._spotlightLongPressAt;
+  assert.equal(typeof openedAt, 'number');
+  t.mock.timers.tick(1400); // a long hold: past the 800ms guard from the open
+  const evt = { prevented: false, preventDefault() { this.prevented = true; } };
+  row._fire('touchend', evt);
+  assert.equal(evt.prevented, true, 'the lift is cancelled');
+  assert.ok(row._spotlightLongPressAt > openedAt, 'guard re-stamped at lift');
+  // a plain quick tap afterwards is not swallowed
+  row._fire('touchstart', touch(30, 40));
+  t.mock.timers.tick(100);
+  const tap = { prevented: false, preventDefault() { this.prevented = true; } };
+  row._fire('touchend', tap);
+  assert.equal(tap.prevented, false);
+});
+
 test('mobile: a native contextmenu (Android) claims the press, so the timer opens no second menu', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const { row } = makeFixture({ mobile: true });
@@ -116,6 +152,7 @@ test('styles.css: every mobile rule in the mobile block is under a mobile body c
     .map((r) => r.split('{')[0].trim())
     .filter(Boolean);
   assert.ok(selectors.length >= 3);
+  assert.match(block, /spotlight-shelf-row {[^}]*user-select: none;[^}]*-webkit-user-select: none;[^}]*-webkit-touch-callout: none;/);
   for (const sel of selectors) {
     for (const part of sel.split(',')) assert.match(part.trim(), /^body.is-(mobile|phone|tablet) /, `ungated selector: ${part}`);
   }
