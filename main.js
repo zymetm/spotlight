@@ -1750,7 +1750,12 @@ function healExplorerHeights(plugin) {
   }
   if (drift <= HEIGHT_DRIFT_PX) return false;
   plugin._heightHealAt = now;
-  plugin.explorerView.tree.infinityScroll.invalidateAll();
+  try {
+    plugin.explorerView.tree.infinityScroll.invalidateAll();
+  } catch (err) {
+    console.error('[spotlight] explorer height re-measure failed -- non-fatal', err);
+    return false;
+  }
   return true;
 }
 
@@ -3549,6 +3554,7 @@ class SpotlightPlugin extends Plugin {
     const connected = this.explorerView && this.explorerView.containerEl && this.explorerView.containerEl.isConnected;
     if (connected) return;
     if (this.explorerView) {
+      stopExplorerHeightWatch(this);
       if (this.starObserver) {
         this.starObserver.disconnect();
         this.starObserver = null;

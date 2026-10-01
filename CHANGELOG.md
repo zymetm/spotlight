@@ -3,6 +3,19 @@
 All notable changes to this plugin are documented here. Dates are when
 the change shipped.
 
+## 0.17.0 — 2026-10-01
+
+Added: Spotlight now works on mobile (tested on iPhone and iPad), and
+Obsidian's manifest no longer marks it desktop-only. On a phone or
+tablet, long-press a shelf row to remove it (there is no right-click),
+and a "Star or unstar this note" command is available to add to
+Obsidian's mobile toolbar. Shelf rows get larger tap targets, no longer
+start an iOS text selection when pressed, and the finger lifting after
+a long-press no longer opens the row. The star command hides itself when
+no note is open. When the file explorer's list drifts out of step with
+the real row heights, the shelf now re-measures it so rows don't
+overlap or leave gaps. None of this changes anything on desktop.
+
 ## 0.16.3 — 2026-09-28
 
 Fixed: after the plugin reloaded or updated without restarting Obsidian,

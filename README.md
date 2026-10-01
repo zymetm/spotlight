@@ -180,10 +180,11 @@ needed.
 
 ## Known limits and conflicts
 
-* **Desktop only.** `isDesktopOnly` is set in the manifest because this
-build has only been tested on desktop — right-click menus and the
-shelf/pill layout haven't been checked on a narrow mobile sidebar.
-Nothing in the underlying mechanism is desktop-specific in principle.
+* **Mobile is supported**, tested on iPhone and iPad. A few things work
+differently there: long-press a shelf row to remove it (there is no
+right-click), a "Star or unstar this note" command is available for
+Obsidian's mobile toolbar, and the shelf's tap targets are larger.
+Desktop looks and behaves exactly as before.
 * **Depends on Obsidian's internal file-explorer structure, not only its
 public API.** The shelf is drawn directly into the file explorer's own
 internal row structure (its per-file DOM elements and its virtualized
