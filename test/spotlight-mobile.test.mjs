@@ -157,3 +157,81 @@ test('styles.css: every mobile rule in the mobile block is under a mobile body c
     for (const part of sel.split(',')) assert.match(part.trim(), /^body.is-(mobile|phone|tablet) /, `ungated selector: ${part}`);
   }
 });
+
+/* ---- stale explorer heights (Matt's first phone test): the list's cached
+ * row heights fall behind the real ones, and a mismatch between predicted and
+ * real row tops triggers exactly one re-measure, on mobile only. */
+function makeDriftFixture({ mobile, realTops, cachedHeights }) {
+  const lp = loadPlugin();
+  lp.obsidian.Platform.isMobile = mobile;
+  lp.obsidian.Platform.isDesktop = !mobile;
+  const items = cachedHeights.map((h, i) => ({
+    info: { computed: true, hidden: false, height: h },
+    el: { parentNode: {}, getBoundingClientRect: () => ({ top: realTops[i] }) },
+  }));
+  const rootEl = { info: { computed: true }, vChildren: { children: items }, childrenEl: { parentNode: {} }, collapsed: false };
+  const calls = { invalidateAll: 0 };
+  const infinityScroll = {
+    rootEl,
+    queued: null,
+    scrollEl: { scrollTop: 0, offsetParent: {}, getBoundingClientRect: () => ({ top: 0 }), addEventListener() {}, removeEventListener() {} },
+    getRootTop: () => 0,
+    invalidateAll: () => { calls.invalidateAll += 1; },
+  };
+  const plugin = new lp.PluginClass(makeApp({}), { id: 'spotlight', version: '0.0.0-gate' });
+  plugin.explorerView = { tree: { infinityScroll } };
+  return { lp, plugin, calls, infinityScroll };
+}
+
+test('stale heights: a healthy list reports no drift and is never re-measured', () => {
+  const { lp, plugin, calls } = makeDriftFixture({ mobile: true, realTops: [0, 40, 80], cachedHeights: [40, 40, 40] });
+  assert.equal(lp.__test.explorerHeightDrift(plugin), 0);
+  assert.equal(lp.__test.healExplorerHeights(plugin), false);
+  assert.equal(calls.invalidateAll, 0);
+});
+
+test('stale heights (mobile): rows really 4px taller than cached -> one re-measure, then rate-limited', () => {
+  // cached 40px each, real 44px each: tops drift 0, 4, 8
+  const { lp, plugin, calls } = makeDriftFixture({ mobile: true, realTops: [0, 44, 88], cachedHeights: [40, 40, 40] });
+  assert.equal(lp.__test.explorerHeightDrift(plugin), 8);
+  assert.equal(lp.__test.healExplorerHeights(plugin), true);
+  assert.equal(calls.invalidateAll, 1);
+  assert.equal(lp.__test.healExplorerHeights(plugin), false, 'a second check inside the interval must not re-measure again');
+  assert.equal(calls.invalidateAll, 1);
+});
+
+test('stale heights: not judged while the list is still measuring or the pane is hidden', () => {
+  const a = makeDriftFixture({ mobile: true, realTops: [0, 44], cachedHeights: [40, 40] });
+  a.infinityScroll.queued = {};
+  assert.equal(a.lp.__test.explorerHeightDrift(a.plugin), 0);
+  const b = makeDriftFixture({ mobile: true, realTops: [0, 44], cachedHeights: [40, 40] });
+  b.infinityScroll.scrollEl.offsetParent = null;
+  assert.equal(b.lp.__test.explorerHeightDrift(b.plugin), 0);
+  const c = makeDriftFixture({ mobile: true, realTops: [0, 44], cachedHeights: [40, 40] });
+  c.infinityScroll.rootEl.vChildren.children[1].info.computed = false;
+  assert.equal(c.lp.__test.explorerHeightDrift(c.plugin), 0);
+});
+
+test('stale heights (desktop): never re-measures, and installs no watcher', () => {
+  const { lp, plugin, calls } = makeDriftFixture({ mobile: false, realTops: [0, 44, 88], cachedHeights: [40, 40, 40] });
+  assert.equal(lp.__test.healExplorerHeights(plugin), false);
+  assert.equal(calls.invalidateAll, 0);
+  let listeners = 0;
+  plugin.explorerView.tree.infinityScroll.scrollEl.addEventListener = () => { listeners += 1; };
+  lp.__test.startExplorerHeightWatch(plugin);
+  assert.equal(listeners, 0);
+  assert.equal(plugin._heightWatch, undefined);
+});
+
+test('stale heights (mobile): the watcher listens to scroll, and stop removes it', () => {
+  const { lp, plugin } = makeDriftFixture({ mobile: true, realTops: [0], cachedHeights: [40] });
+  const seen = [];
+  const el = plugin.explorerView.tree.infinityScroll.scrollEl;
+  el.addEventListener = (type, fn, opts) => seen.push(['add', type, opts && opts.passive]);
+  el.removeEventListener = (type) => seen.push(['remove', type]);
+  lp.__test.startExplorerHeightWatch(plugin);
+  assert.deepEqual(seen, [['add', 'scroll', true]]);
+  lp.__test.stopExplorerHeightWatch(plugin);
+  assert.deepEqual(seen[1], ['remove', 'scroll']);
+  assert.equal(plugin._heightWatch, null);
+});

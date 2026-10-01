@@ -1674,6 +1674,119 @@ function invalidateItemHeight(plugin, item) {
   if (infinityScroll && typeof infinityScroll.invalidate === 'function') infinityScroll.invalidate(item);
 }
 
+/* Mobile: heal a stale explorer height cache (the "blank gap under the
+ * shelves" bug, Matt's first phone test, 2026-10-01).
+ *
+ * Obsidian's explorer list measures each row once, caches the height, and
+ * positions every row from those cached numbers; it only measures again when
+ * something tells it to (a width change, or `invalidate()`). If a row's real
+ * height changes after it was measured without the width changing (a CSS
+ * class applied after the first measurement -- reproduced here by switching
+ * Obsidian from tablet to phone layout; on a phone: fonts, the drawer
+ * opening, text size settling), every cached row is a few pixels short, the
+ * error adds up row by row, and by the time the list reaches the far side
+ * of the shelves the rows it thinks belong in view are really somewhere
+ * else: blank space, rows that appear only after scrolling on and vanish
+ * going back. This plugin cannot tell WHICH change did it, so it checks the
+ * result instead: where the list's own numbers say each drawn row should
+ * sit versus where it really sits. Only a real mismatch triggers one full
+ * re-measure (rate-limited), so a healthy list costs a few comparisons and
+ * nothing else -- never a per-pass invalidate (see
+ * `reapplyBranchHiddenState` for why that is a loop). Mobile only (ruling
+ * m3s): the symptom was never seen on desktop. */
+const HEIGHT_DRIFT_PX = 3;
+const HEIGHT_CHECK_DELAY_MS = 120;
+const HEIGHT_HEAL_MIN_INTERVAL_MS = 1000;
+
+/** The largest gap, in px, between a drawn row's real top and the top the
+ * list's cached heights predict for it. 0 when the list is not in a state
+ * that can be judged (no list, hidden pane, or measuring still in progress). */
+function explorerHeightDrift(plugin) {
+  const view = plugin.explorerView;
+  const is = view && view.tree && view.tree.infinityScroll;
+  if (!is || !is.rootEl || !is.scrollEl || typeof is.getRootTop !== 'function' || typeof is.invalidateAll !== 'function') return 0;
+  const scrollEl = is.scrollEl;
+  if (is.queued || scrollEl.offsetParent === null) return 0;
+  const scrollTop = scrollEl.scrollTop;
+  const scrollTopPx = scrollEl.getBoundingClientRect().top;
+  let predicted = is.getRootTop();
+  let worst = 0;
+  let pending = false;
+  const walk = (item, isRoot) => {
+    if (pending) return;
+    const info = item.info;
+    if (!isRoot) {
+      if (!info || !info.computed) {
+        pending = true;
+        return;
+      }
+      if (!info.hidden && item.el && item.el.parentNode) {
+        const actual = item.el.getBoundingClientRect().top - scrollTopPx + scrollTop;
+        const gap = Math.abs(actual - predicted);
+        if (gap > worst) worst = gap;
+      }
+      predicted += info.hidden ? 0 : info.height;
+    }
+    const kids = item.vChildren && item.vChildren.children;
+    if (kids && !item.collapsed && item.childrenEl && item.childrenEl.parentNode) {
+      for (const child of kids) walk(child, false);
+    }
+  };
+  walk(is.rootEl, true);
+  return pending ? 0 : worst;
+}
+
+/** One check; re-measures the whole list once when it has drifted. */
+function healExplorerHeights(plugin) {
+  if (plugin._unloaded || !isMobileApp()) return false;
+  const now = Date.now();
+  if (plugin._heightHealAt && now - plugin._heightHealAt < HEIGHT_HEAL_MIN_INTERVAL_MS) return false;
+  let drift = 0;
+  try {
+    drift = explorerHeightDrift(plugin);
+  } catch (err) {
+    console.error('[spotlight] explorer height check failed -- non-fatal', err);
+    return false;
+  }
+  if (drift <= HEIGHT_DRIFT_PX) return false;
+  plugin._heightHealAt = now;
+  plugin.explorerView.tree.infinityScroll.invalidateAll();
+  return true;
+}
+
+function stopExplorerHeightWatch(plugin) {
+  const w = plugin._heightWatch;
+  if (!w) return;
+  if (w.timer) window.clearTimeout(w.timer);
+  if (w.scrollEl && typeof w.scrollEl.removeEventListener === 'function') w.scrollEl.removeEventListener('scroll', w.onEvent);
+  if (w.resizeObserver) w.resizeObserver.disconnect();
+  plugin._heightWatch = null;
+}
+
+/** Mobile only. Checks after a scroll burst and when the pane changes size
+ * (which is also what opening the drawer does). */
+function startExplorerHeightWatch(plugin) {
+  stopExplorerHeightWatch(plugin);
+  if (!isMobileApp()) return;
+  const view = plugin.explorerView;
+  const scrollEl = view && view.tree && view.tree.infinityScroll && view.tree.infinityScroll.scrollEl;
+  if (!scrollEl || typeof scrollEl.addEventListener !== 'function') return;
+  const watch = { scrollEl, timer: null, resizeObserver: null, onEvent: null };
+  watch.onEvent = () => {
+    if (watch.timer) return;
+    watch.timer = window.setTimeout(() => {
+      watch.timer = null;
+      healExplorerHeights(plugin);
+    }, HEIGHT_CHECK_DELAY_MS);
+  };
+  scrollEl.addEventListener('scroll', watch.onEvent, { passive: true });
+  if (typeof ResizeObserver !== 'undefined') {
+    watch.resizeObserver = new ResizeObserver(watch.onEvent);
+    watch.resizeObserver.observe(scrollEl);
+  }
+  plugin._heightWatch = watch;
+}
+
 /**
  * True iff `node` (or an ancestor, walked via `parentNode`, bounded so a
  * malformed/circular chain can never hang) carries a plugin-owned class --
@@ -3588,6 +3701,7 @@ class SpotlightPlugin extends Plugin {
     this._optimisticStarOverrides = new Map();
     this._starWritesInFlight = new Map();
 
+    stopExplorerHeightWatch(this);
     if (this.starObserver) {
       this.starObserver.disconnect();
       this.starObserver = null;
@@ -3867,6 +3981,8 @@ class SpotlightPlugin extends Plugin {
       });
       this.starObserver.observe(this.explorerView.containerEl, { childList: true, subtree: true });
     }
+
+    startExplorerHeightWatch(this); // mobile only; no-op on desktop
 
     this.runReapply();
   }
@@ -4647,6 +4763,10 @@ module.exports.__test = {
   // the branch toggle
   applyBranchHiddenDomState,
   invalidateItemHeight,
+  explorerHeightDrift,
+  healExplorerHeights,
+  startExplorerHeightWatch,
+  stopExplorerHeightWatch,
   reapplyBranchHiddenState,
   syncBranchToggleEl,
   guardScrollAcrossHiddenBranchReveal,
